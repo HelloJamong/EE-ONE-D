@@ -1,0 +1,32 @@
+{
+  "name": "ee-one-d",
+  "version": "0.1.0",
+  "description": "EE-ONE-D Discord 통합 관리 봇",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/index.js",
+    "migrate:dev": "prisma migrate dev --name init",
+    "migrate:deploy": "prisma migrate deploy",
+    "prisma:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.14.0",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5",
+    "pino": "^8.19.0",
+    "pg": "^8.11.3",
+    "cheerio": "^1.0.0-rc.12",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "prisma": "^5.14.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.5"
+  }
+}

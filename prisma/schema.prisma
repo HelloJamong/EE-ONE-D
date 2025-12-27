@@ -1,0 +1,72 @@
+// 선택 근거: Prisma는 TS 친화적 타입 생성과 마이그레이션 툴체인이 성숙해 있어 초기 생산성을 높이기 위해 선택했습니다.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PanelMode {
+  MULTI
+  SINGLE
+}
+
+model guild_settings {
+  guild_id              String   @id
+  role_panel_channel_id String?
+  admin_config_channel_id String?
+  log_channel_id        String?
+  updated_at            DateTime @updatedAt
+
+  role_panels role_panels[]
+  audit_events audit_events[]
+}
+
+model role_panels {
+  id                  String            @id @default(cuid())
+  guild_id            String
+  mode                PanelMode
+  allow_none          Boolean           @default(true)
+  title               String
+  description         String
+  published_channel_id String?
+  published_message_id String?
+  created_by          String
+  created_at          DateTime          @default(now())
+  updated_at          DateTime          @updatedAt
+
+  guild guild_settings @relation(fields: [guild_id], references: [guild_id], onDelete: Cascade)
+  items role_panel_items[]
+}
+
+model role_panel_items {
+  id         String      @id @default(cuid())
+  panel_id   String
+  emoji_id   String
+  role_id    String
+  label      String
+  sort_order Int         @default(0)
+  created_at DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+
+  panel role_panels @relation(fields: [panel_id], references: [id], onDelete: Cascade)
+
+  @@unique([panel_id, emoji_id])
+  @@unique([panel_id, role_id])
+}
+
+model audit_events {
+  id         String   @id @default(cuid())
+  guild_id   String
+  event_type String
+  actor_id   String
+  channel_id String?
+  target_id  String?
+  created_at DateTime @default(now())
+  details    Json
+
+  guild guild_settings @relation(fields: [guild_id], references: [guild_id], onDelete: Cascade)
+}

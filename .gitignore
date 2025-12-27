@@ -1,0 +1,8 @@
+.env
+setup.md
+.env
+setup.md
+node_modules
+dist
+.DS_Store
+*.log
