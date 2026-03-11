@@ -19,6 +19,7 @@ model guild_settings {
   role_panel_channel_id String?
   admin_config_channel_id String?
   log_channel_id        String?
+  audit_enabled         Boolean  @default(false)
   updated_at            DateTime @updatedAt
 
   role_panels role_panels[]
