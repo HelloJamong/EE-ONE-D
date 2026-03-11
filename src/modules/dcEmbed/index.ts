@@ -1,10 +1,10 @@
-import { EmbedBuilder } from "discord.js";
+import { EmbedBuilder, Message } from "discord.js";
 import { load } from "cheerio";
 import { TTLCache } from "../../shared/cache.js";
 import { BotModule, AppContext } from "../../types.js";
 
-const cache = new TTLCache<{ title: string; gallery: string; image?: string; summary?: string }>(60_000);
-const DC_REGEX = /^https?:\/\/(m\.)?gall\.dcinside\.com\/board\/view\?[^ \n]+$/i;
+const cache = new TTLCache<{ title: string; gallery: string; summary?: string }>(60_000);
+const DC_REGEX = /^https?:\/\/(m\.)?gall\.dcinside\.com\/(mgallery\/|mini\/)?board\/view\/?\?[^ \n]+$/i;
 
 function normalizeUrl(raw: string) {
   try {
@@ -20,22 +20,47 @@ async function fetchPreview(url: string, logger: AppContext["logger"]) {
   const cached = cache.get(url);
   if (cached) return cached;
 
-  const res = await fetch(url, { headers: { "User-Agent": "EE-ONE-D bot" } });
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
   if (!res.ok) throw new Error(`Failed to fetch page: ${res.status}`);
   const html = await res.text();
   const $ = load(html);
-  const title = $("meta[property='og:title']").attr("content") || $("title").text();
-  const gallery = $("meta[name='subject']").attr("content") || $("meta[property='og:site_name']").attr("content") || "dcinside";
-  const image = $("meta[property='og:image']").attr("content") || undefined;
+
+  // og:title은 "글제목 - 갤러리명" 형식이므로 분리
+  const rawTitle = $("meta[property='og:title']").attr("content") || $("title").text() || "";
+  const titleParts = rawTitle.split(" - ");
+  const title = titleParts.length > 1 ? titleParts.slice(0, -1).join(" - ").trim() : rawTitle.trim();
+
+  // 갤러리명 추출: og:title 마지막 부분 또는 메타데이터에서
+  const galleryFromTitle = titleParts.length > 1 ? titleParts[titleParts.length - 1].trim() : null;
+  const gallery = galleryFromTitle ||
+    $("meta[name='subject']").attr("content")?.trim() ||
+    $(".gallname").text()?.trim() ||
+    $("meta[property='og:site_name']").attr("content")?.trim() ||
+    "디시인사이드";
+
   const summary =
     $("meta[property='og:description']").attr("content") ||
     $("meta[name='description']").attr("content") ||
     undefined;
 
-  const preview = { title: title?.trim() ?? "디시인사이드 게시글", gallery: gallery.trim(), image, summary };
+  const preview = { title: title || "디시인사이드 게시글", gallery, summary };
   cache.set(url, preview);
-  logger.debug({ url }, "Cached dcinside preview");
+  logger.debug({ url, preview }, "Cached dcinside preview");
   return preview;
+}
+
+function buildEmbed(message: Message, url: string, preview: { title: string; gallery: string; summary?: string }) {
+  return new EmbedBuilder()
+    .setAuthor({
+      name: message.member?.displayName ?? message.author.username,
+      iconURL: message.author.displayAvatarURL({ size: 64 }),
+    })
+    .setTitle(preview.title)
+    .setURL(url)
+    .setDescription(preview.summary?.slice(0, 300) ?? "")
+    .setFooter({ text: preview.gallery })
+    .setColor(message.member?.displayColor ?? 0x0096ff)
+    .setTimestamp(message.createdAt);
 }
 
 const dcEmbedModule: BotModule = {
@@ -52,24 +77,18 @@ const dcEmbedModule: BotModule = {
       const url = normalizeUrl(content);
       try {
         const preview = await fetchPreview(url, logger);
-        const embed = new EmbedBuilder()
-          .setTitle(preview.title)
-          .setURL(url)
-          .setDescription(preview.summary?.slice(0, 200) ?? "게시글 미리보기")
-          .addFields({ name: "갤러리", value: preview.gallery })
-          .setColor(0x0096ff);
-        if (preview.image) embed.setImage(preview.image);
+        const embed = buildEmbed(message, url, preview);
 
-        await message.delete();
+        try {
+          await message.delete();
+        } catch (deleteError) {
+          logger.warn({ err: deleteError, channelId: message.channelId, authorId: message.author.id }, "Failed to delete original DC message");
+        }
+
         await message.channel.send({ embeds: [embed] });
       } catch (error) {
+        // 미리보기 실패 시 원본 메시지 유지, 아무 동작 하지 않음
         logger.warn({ err: error }, "Failed to fetch dcinside preview");
-        const embed = new EmbedBuilder()
-          .setTitle("디시인사이드 링크")
-          .setURL(url)
-          .setDescription("미리보기를 가져오지 못했습니다.")
-          .setColor(0xffa500);
-        await message.channel.send({ embeds: [embed] });
       }
     });
   },
