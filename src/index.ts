@@ -1,3 +1,4 @@
+import { ActivityType } from "discord.js";
 import { loadConfig } from "./shared/env.js";
 import { createLogger } from "./shared/logger.js";
 import { getPrisma } from "./shared/db.js";
@@ -53,6 +54,10 @@ async function bootstrap() {
 
   client.once("ready", () => {
     logger.info({ tag: client.user?.tag }, "Bot is ready");
+    client.user?.setPresence({
+      activities: [{ name: "BIG BROTHER IS WATCHING YOU", type: ActivityType.Watching }],
+      status: "online",
+    });
   });
 
   await client.login(config.DISCORD_TOKEN);

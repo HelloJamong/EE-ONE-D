@@ -5,6 +5,7 @@ import {
   REST,
   Routes,
   SlashCommandBuilder,
+  SlashCommandSubcommandsOnlyBuilder,
   ChatInputCommandInteraction,
 } from "discord.js";
 import { AppConfig } from "./env.js";
@@ -34,7 +35,7 @@ export function createDiscordClient(config: AppConfig) {
 }
 
 export async function registerCommands(
-  commands: SlashCommandBuilder[],
+  commands: (SlashCommandBuilder | SlashCommandSubcommandsOnlyBuilder)[],
   rest: REST,
   config: AppConfig,
   logger: Logger

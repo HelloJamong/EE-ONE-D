@@ -64,7 +64,7 @@ const commands = [
           )
       )
       .addSubcommand((sub) => sub.setName("show").setDescription("현재 설정을 확인합니다.")),
-    handle: async (interaction, context) => {
+    handle: async (interaction: ChatInputCommandInteraction, context: AppContext) => {
       try {
         ensureAdministrator(interaction);
       } catch (error) {

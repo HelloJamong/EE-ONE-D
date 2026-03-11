@@ -157,7 +157,7 @@ async function publishPanel(
     }
     await interaction.reply({ content: "패널을 게시했습니다.", ephemeral: true });
   } catch (error) {
-    interaction.client.logger?.error({ err: error }, "Failed to publish panel");
+    context.logger.error({ err: error }, "Failed to publish panel");
     await interaction.reply({ content: "패널 게시 중 오류가 발생했습니다.", ephemeral: true });
   }
 }
@@ -264,7 +264,7 @@ const commands = [
             opt.setName("message_id").setDescription("메시지 ID").setRequired(true)
           )
       ),
-    handle: async (interaction, context) => {
+    handle: async (interaction: ChatInputCommandInteraction, context: AppContext) => {
       const guildId = interaction.guildId!;
       const prisma = context.db;
 
@@ -277,7 +277,7 @@ const commands = [
 
       const settings = await prisma.guild_settings.findUnique({ where: { guild_id: guildId } });
       try {
-        await ensureAdminChannel(interaction, settings?.admin_config_channel_id);
+        await ensureAdminChannel(interaction, settings?.admin_config_channel_id ?? undefined);
       } catch (error) {
         await interaction.reply({ content: (error as Error).message, ephemeral: true });
         return;
@@ -375,10 +375,15 @@ const commands = [
 
       if (sub === "set_message") {
         const panelId = interaction.options.getString("panel_id", true);
-        const channel = interaction.options.getChannel("channel", true);
+        const channelOption = interaction.options.getChannel("channel", true);
         const messageId = interaction.options.getString("message_id", true);
-        if (channel.type !== ChannelType.GuildText) {
+        if (channelOption.type !== ChannelType.GuildText) {
           await interaction.reply({ content: "텍스트 채널만 사용할 수 있습니다.", ephemeral: true });
+          return;
+        }
+        const channel = interaction.guild?.channels.cache.get(channelOption.id);
+        if (!channel || channel.type !== ChannelType.GuildText) {
+          await interaction.reply({ content: "채널을 찾을 수 없습니다.", ephemeral: true });
           return;
         }
         try {

@@ -1,4 +1,4 @@
-import { Client } from "discord.js";
+import { Client, ChatInputCommandInteraction, SlashCommandBuilder, SlashCommandSubcommandsOnlyBuilder } from "discord.js";
 import { PrismaClient } from "@prisma/client";
 import { Logger } from "pino";
 import { AppConfig } from "./shared/env.js";
@@ -18,6 +18,6 @@ export interface BotModule {
 }
 
 export interface SlashCommand {
-  data: import("discord.js").SlashCommandBuilder;
-  handle: (interaction: import("discord.js").ChatInputCommandInteraction, context: AppContext) => Promise<void>;
+  data: SlashCommandBuilder | SlashCommandSubcommandsOnlyBuilder;
+  handle: (interaction: ChatInputCommandInteraction, context: AppContext) => Promise<void>;
 }
