@@ -214,7 +214,12 @@ const commands = [
       .addSubcommand((sub) =>
         sub
           .setName("list")
-          .setDescription("패널에 등록된 항목을 조회합니다.")
+          .setDescription("생성된 패널 목록을 조회합니다.")
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("list_items")
+          .setDescription("패널에 등록된 레이블 목록을 조회합니다.")
           .addStringOption((opt) =>
             opt.setName("panel_id").setDescription("패널 ID").setRequired(true)
           )
@@ -378,6 +383,23 @@ const commands = [
         const label = interaction.options.getString("label", false) || "";
         const order = interaction.options.getInteger("order") ?? 0;
 
+        // 중복 확인
+        const existingByEmoji = await prisma.role_panel_items.findFirst({
+          where: { panel_id: panelId, emoji_id: emojiId },
+        });
+        if (existingByEmoji) {
+          await interaction.reply({ content: "이미 해당 이모지를 사용하는 레이블이 존재합니다.", ephemeral: true });
+          return;
+        }
+
+        const existingByRole = await prisma.role_panel_items.findFirst({
+          where: { panel_id: panelId, role_id: role.id },
+        });
+        if (existingByRole) {
+          await interaction.reply({ content: `이미 ${role.name} 역할이 패널에 추가되어 있습니다.`, ephemeral: true });
+          return;
+        }
+
         await prisma.role_panel_items.create({
           data: {
             panel_id: panelId,
@@ -388,7 +410,7 @@ const commands = [
           },
         });
 
-        await interaction.reply({ content: "패널 항목을 추가했습니다.", ephemeral: true });
+        await interaction.reply({ content: "패널 항목을 추가했습니다. `/panel publish`로 변경사항을 적용하세요.", ephemeral: true });
         return;
       }
 
@@ -408,17 +430,33 @@ const commands = [
       }
 
       if (sub === "list") {
+        const panels = await prisma.role_panels.findMany({
+          where: { guild_id: guildId },
+          orderBy: { created_at: "desc" },
+        });
+        if (!panels.length) {
+          await interaction.reply({ content: "생성된 패널이 없습니다.", ephemeral: true });
+          return;
+        }
+        const rows = panels
+          .map((panel) => `**${panel.title}**\nID: \`${panel.id}\` | 모드: ${panel.mode} | 채널: ${panel.published_channel_id ? `<#${panel.published_channel_id}>` : "미게시"}`)
+          .join("\n\n");
+        await interaction.reply({ content: rows, ephemeral: true });
+        return;
+      }
+
+      if (sub === "list_items") {
         const panelId = interaction.options.getString("panel_id", true);
         const items = await prisma.role_panel_items.findMany({
           where: { panel_id: panelId },
           orderBy: { sort_order: "asc" },
         });
         if (!items.length) {
-          await interaction.reply({ content: "등록된 항목이 없습니다.", ephemeral: true });
+          await interaction.reply({ content: "등록된 레이블이 없습니다.", ephemeral: true });
           return;
         }
         const rows = items
-          .map((item) => `${item.label} | emoji:${item.emoji_id} | role:${item.role_id} | order:${item.sort_order}`)
+          .map((item) => `${item.label || "(레이블 없음)"} | emoji:${item.emoji_id} | role:<@&${item.role_id}> | order:${item.sort_order}`)
           .join("\n");
         await interaction.reply({ content: rows, ephemeral: true });
         return;
