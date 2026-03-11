@@ -54,24 +54,78 @@ export async function registerCommands(
   }
 }
 
+export async function registerAllCommands(
+  staticCommands: (SlashCommandBuilder | SlashCommandSubcommandsOnlyBuilder)[],
+  customCommands: Array<{ name: string; description: string }>,
+  rest: REST,
+  config: AppConfig,
+  logger: Logger
+) {
+  const customSlashCommands = customCommands.map((cmd) =>
+    new SlashCommandBuilder()
+      .setName(cmd.name)
+      .setDescription(cmd.description || "커스텀 명령어")
+      .toJSON()
+  );
+
+  const body = [
+    ...staticCommands.map((cmd) => cmd.toJSON()),
+    ...customSlashCommands,
+  ];
+
+  if (config.COMMAND_SCOPE === "guild" && config.DISCORD_GUILD_ID) {
+    logger.info({ guild: config.DISCORD_GUILD_ID, count: body.length }, "Registering commands");
+    await rest.put(
+      Routes.applicationGuildCommands(config.DISCORD_CLIENT_ID, config.DISCORD_GUILD_ID),
+      { body }
+    );
+  } else {
+    logger.info({ count: body.length }, "Registering global commands");
+    await rest.put(Routes.applicationCommands(config.DISCORD_CLIENT_ID), { body });
+  }
+}
+
 export async function dispatchCommand(
   interaction: ChatInputCommandInteraction,
   commands: SlashCommand[],
   context: AppContext
 ) {
-  const command = commands.find((cmd) => cmd.data.name === interaction.commandName);
-  if (!command) {
-    await interaction.reply({ content: "알 수 없는 명령어입니다.", ephemeral: true });
+  // 1. 고정 명령어 찾기
+  const staticCommand = commands.find((cmd) => cmd.data.name === interaction.commandName);
+  if (staticCommand) {
+    try {
+      await staticCommand.handle(interaction, context);
+    } catch (error) {
+      context.logger.error({ err: error }, "Command execution failed");
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: "명령 실행 중 오류가 발생했습니다.", ephemeral: true });
+      } else {
+        await interaction.reply({ content: "명령 실행 중 오류가 발생했습니다.", ephemeral: true });
+      }
+    }
     return;
   }
-  try {
-    await command.handle(interaction, context);
-  } catch (error) {
-    context.logger.error({ err: error }, "Command execution failed");
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp({ content: "명령 실행 중 오류가 발생했습니다.", ephemeral: true });
-    } else {
+
+  // 2. 커스텀 명령어 찾기
+  const customCommand = await context.db.custom_commands.findUnique({
+    where: {
+      guild_id_name: {
+        guild_id: interaction.guildId!,
+        name: interaction.commandName,
+      },
+    },
+  });
+
+  if (customCommand) {
+    try {
+      await interaction.reply({ content: customCommand.response, ephemeral: false });
+    } catch (error) {
+      context.logger.error({ err: error }, "Custom command execution failed");
       await interaction.reply({ content: "명령 실행 중 오류가 발생했습니다.", ephemeral: true });
     }
+    return;
   }
+
+  // 3. 명령어를 찾을 수 없음
+  await interaction.reply({ content: "알 수 없는 명령어입니다.", ephemeral: true });
 }

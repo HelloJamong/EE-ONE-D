@@ -24,6 +24,7 @@ model guild_settings {
 
   role_panels role_panels[]
   audit_events audit_events[]
+  custom_commands custom_commands[]
 }
 
 model role_panels {
@@ -70,4 +71,19 @@ model audit_events {
   details    Json
 
   guild guild_settings @relation(fields: [guild_id], references: [guild_id], onDelete: Cascade)
+}
+
+model custom_commands {
+  id          String   @id @default(cuid())
+  guild_id    String
+  name        String
+  response    String   @db.Text
+  created_by  String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  guild guild_settings @relation(fields: [guild_id], references: [guild_id], onDelete: Cascade)
+
+  @@unique([guild_id, name])
+  @@index([guild_id])
 }

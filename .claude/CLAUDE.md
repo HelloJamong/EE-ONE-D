@@ -38,9 +38,12 @@
 - DC 링크 단독 메시지 -> 임베드 미리보기
 - TTL 캐싱 적용
 
-### 6. 커스텀 명령어 (`추가필요`)
-- 커스텀 명령어 입력 시 특정 텍스트 또는 링크 출력
-- 커스텀 명령어 등록 및 삭제 기능 제공
+### 6. 커스텀 명령어 (`src/modules/customCommands/`)
+- `/cmd add/remove/list/reload` 명령어
+- 관리자가 커스텀 슬래시 커맨드 등록/삭제
+- DB 저장 후 Discord API 동적 등록 (재시작 불필요)
+- 예약어 검증 (panel, config, cmd)
+- 감사 로그 자동 기록
 
 ## 프로젝트 구조
 
@@ -51,6 +54,7 @@ src/
 ├── modules/              # 기능별 모듈
 │   ├── audit/            # 감사 로그
 │   ├── config/           # 관리자 설정
+│   ├── customCommands/   # 커스텀 명령어
 │   ├── dcEmbed/          # 디시인사이드 미리보기
 │   ├── emojiExpand/      # 이모지 확대
 │   └── rolePanels/       # 역할 패널
@@ -68,6 +72,7 @@ src/
 - `role_panels`: 역할 패널 정보 (MULTI/SINGLE 모드)
 - `role_panel_items`: 패널 내 역할 항목
 - `audit_events`: 감사 로그 이벤트
+- `custom_commands`: 커스텀 명령어 정보 (이름, 응답)
 
 ## 개발 명령어
 

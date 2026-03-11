@@ -22,4 +22,4 @@ COPY --from=builder /app/dist ./dist
 COPY prisma ./prisma
 COPY package.json ./
 
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/index.js"]
