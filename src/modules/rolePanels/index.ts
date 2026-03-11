@@ -7,8 +7,12 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
   GuildMember,
+  ModalBuilder,
+  ModalSubmitInteraction,
   Role,
   SlashCommandBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
 import { PanelMode } from "@prisma/client";
@@ -32,34 +36,30 @@ async function ensureAdminChannel(interaction: ChatInputCommandInteraction, admi
   }
 }
 
-function buildPanelEmbed(panel: any, items: any[]) {
-  const embed = new EmbedBuilder()
+function buildPanelEmbed(panel: any) {
+  return new EmbedBuilder()
     .setTitle(panel.title)
     .setDescription(panel.description)
-    .setFooter({ text: `패널: ${panel.id} | 모드: ${panel.mode}` });
-
-  items
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .forEach((item) => {
-      embed.addFields({ name: `${item.label}`, value: `<@&${item.role_id}>`, inline: true });
-    });
-  return embed;
+    .setColor(0x5865f2);
 }
 
 function buildButtons(items: any[]) {
   const rows: ActionRowBuilder<ButtonBuilder>[] = [];
   const sorted = items.sort((a, b) => a.sort_order - b.sort_order);
-  for (let i = 0; i < sorted.length; i += 4) {
-    const slice = sorted.slice(i, i + 4);
+  for (let i = 0; i < sorted.length; i += 5) {
+    const slice = sorted.slice(i, i + 5);
     const row = new ActionRowBuilder<ButtonBuilder>();
     slice.forEach((item) => {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`${BUTTON_PREFIX}:${item.panel_id}:${item.id}`)
-          .setLabel(item.label)
-          .setStyle(ButtonStyle.Secondary)
-          .setEmoji({ id: item.emoji_id })
-      );
+      const button = new ButtonBuilder()
+        .setCustomId(`${BUTTON_PREFIX}:${item.panel_id}:${item.id}`)
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji({ id: item.emoji_id });
+
+      if (item.label) {
+        button.setLabel(item.label);
+      }
+
+      row.addComponents(button);
     });
     rows.push(row);
     if (rows.length >= 5) break;
@@ -141,7 +141,7 @@ async function publishPanel(
     return;
   }
 
-  const embed = buildPanelEmbed(panel, panel.items);
+  const embed = buildPanelEmbed(panel);
   const components = buildButtons(panel.items);
 
   try {
@@ -170,28 +170,16 @@ const commands = [
       .addSubcommand((sub) =>
         sub
           .setName("create")
-          .setDescription("새 패널을 생성합니다.")
+          .setDescription("새 패널을 생성하고 채널에 게시합니다.")
           .addStringOption((opt) =>
+            opt.setName("name").setDescription("패널 이름").setRequired(true)
+          )
+          .addChannelOption((opt) =>
             opt
-              .setName("mode")
-              .setDescription("패널 모드")
-              .addChoices(
-                { name: "multi", value: "MULTI" },
-                { name: "single", value: "SINGLE" }
-              )
+              .setName("channel")
+              .setDescription("패널을 게시할 채널")
+              .addChannelTypes(ChannelType.GuildText)
               .setRequired(true)
-          )
-          .addStringOption((opt) =>
-            opt.setName("title").setDescription("패널 제목").setRequired(true)
-          )
-          .addStringOption((opt) =>
-            opt.setName("description").setDescription("패널 설명").setRequired(true)
-          )
-          .addBooleanOption((opt) =>
-            opt
-              .setName("allow_none")
-              .setDescription("싱글 모드에서 선택 해제 허용")
-              .setRequired(false)
           )
       )
       .addSubcommand((sub) =>
@@ -206,7 +194,7 @@ const commands = [
           )
           .addRoleOption((opt) => opt.setName("role").setDescription("역할").setRequired(true))
           .addStringOption((opt) =>
-            opt.setName("label").setDescription("버튼 라벨").setRequired(true)
+            opt.setName("label").setDescription("버튼 라벨 (미입력 시 이모지만 표시)").setRequired(false)
           )
           .addIntegerOption((opt) =>
             opt.setName("order").setDescription("정렬 순서").setRequired(false)
@@ -263,6 +251,51 @@ const commands = [
           .addStringOption((opt) =>
             opt.setName("message_id").setDescription("메시지 ID").setRequired(true)
           )
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("edit")
+          .setDescription("패널의 제목과 설명을 수정합니다.")
+          .addStringOption((opt) =>
+            opt.setName("panel_id").setDescription("패널 ID").setRequired(true)
+          )
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("delete")
+          .setDescription("패널을 삭제합니다.")
+          .addStringOption((opt) =>
+            opt.setName("panel_id").setDescription("패널 ID").setRequired(true)
+          )
+          .addBooleanOption((opt) =>
+            opt
+              .setName("delete_message")
+              .setDescription("게시된 메시지도 삭제 (기본: true)")
+              .setRequired(false)
+          )
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("edit_item")
+          .setDescription("패널의 레이블을 수정합니다.")
+          .addStringOption((opt) =>
+            opt.setName("panel_id").setDescription("패널 ID").setRequired(true)
+          )
+          .addStringOption((opt) =>
+            opt.setName("old_emoji").setDescription("수정할 레이블의 현재 이모지").setRequired(true)
+          )
+          .addStringOption((opt) =>
+            opt.setName("new_emoji").setDescription("새 이모지 (선택)").setRequired(false)
+          )
+          .addRoleOption((opt) =>
+            opt.setName("role").setDescription("새 역할 (선택)").setRequired(false)
+          )
+          .addStringOption((opt) =>
+            opt.setName("label").setDescription("새 라벨 (선택)").setRequired(false)
+          )
+          .addIntegerOption((opt) =>
+            opt.setName("order").setDescription("새 순서 (선택)").setRequired(false)
+          )
       ),
     handle: async (interaction: ChatInputCommandInteraction, context: AppContext) => {
       const guildId = interaction.guildId!;
@@ -286,26 +319,50 @@ const commands = [
       const sub = interaction.options.getSubcommand();
 
       if (sub === "create") {
-        const mode = interaction.options.getString("mode", true) as PanelMode;
-        const title = interaction.options.getString("title", true);
-        const description = interaction.options.getString("description", true);
-        const allowNone = interaction.options.getBoolean("allow_none") ?? true;
+        const name = interaction.options.getString("name", true);
+        const channelOption = interaction.options.getChannel("channel", true);
 
+        if (channelOption.type !== ChannelType.GuildText) {
+          await interaction.reply({ content: "텍스트 채널만 사용할 수 있습니다.", ephemeral: true });
+          return;
+        }
+
+        const channel = interaction.guild?.channels.cache.get(channelOption.id);
+        if (!channel || channel.type !== ChannelType.GuildText) {
+          await interaction.reply({ content: "채널을 찾을 수 없습니다.", ephemeral: true });
+          return;
+        }
+
+        // 기본값으로 패널 생성
         const created = await prisma.role_panels.create({
           data: {
             guild_id: guildId,
-            mode,
-            allow_none: allowNone,
-            title,
-            description,
+            mode: PanelMode.MULTI,
+            allow_none: true,
+            title: name,
+            description: "역할을 선택하세요.",
             created_by: interaction.user.id,
           },
         });
 
-        await interaction.reply({
-          content: `패널을 생성했습니다: ${created.id}`,
-          ephemeral: true,
-        });
+        // 즉시 빈 패널 게시
+        try {
+          const embed = buildPanelEmbed(created);
+          const sent = await channel.send({ embeds: [embed] });
+
+          await prisma.role_panels.update({
+            where: { id: created.id },
+            data: { published_channel_id: channel.id, published_message_id: sent.id },
+          });
+
+          await interaction.reply({
+            content: `패널 생성 완료!\nID: ${created.id}\n채널: <#${channel.id}>\n\n다음 단계:\n1. \`/panel edit\`로 제목/설명/모드 수정\n2. \`/panel add\`로 역할 추가`,
+            ephemeral: true,
+          });
+        } catch (error) {
+          context.logger.error({ err: error }, "Failed to publish new panel");
+          await interaction.reply({ content: "패널 게시 중 오류가 발생했습니다.", ephemeral: true });
+        }
         return;
       }
 
@@ -318,7 +375,7 @@ const commands = [
           return;
         }
         const role = interaction.options.getRole("role", true) as Role;
-        const label = interaction.options.getString("label", true);
+        const label = interaction.options.getString("label", false) || "";
         const order = interaction.options.getInteger("order") ?? 0;
 
         await prisma.role_panel_items.create({
@@ -400,9 +457,184 @@ const commands = [
         }
         return;
       }
+
+      if (sub === "edit") {
+        const panelId = interaction.options.getString("panel_id", true);
+        const panel = await prisma.role_panels.findUnique({ where: { id: panelId } });
+        if (!panel) {
+          await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
+          return;
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId(`panel_edit:${panelId}`)
+          .setTitle("패널 수정");
+
+        const titleInput = new TextInputBuilder()
+          .setCustomId("title")
+          .setLabel("제목")
+          .setStyle(TextInputStyle.Short)
+          .setValue(panel.title)
+          .setMaxLength(256)
+          .setRequired(true);
+
+        const descInput = new TextInputBuilder()
+          .setCustomId("description")
+          .setLabel("설명 (여러 줄 입력 가능)")
+          .setStyle(TextInputStyle.Paragraph)
+          .setValue(panel.description)
+          .setMaxLength(4000)
+          .setRequired(true);
+
+        const modeInput = new TextInputBuilder()
+          .setCustomId("mode")
+          .setLabel("모드 (MULTI 또는 SINGLE)")
+          .setStyle(TextInputStyle.Short)
+          .setValue(panel.mode)
+          .setMaxLength(10)
+          .setRequired(true);
+
+        modal.addComponents(
+          new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(descInput),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(modeInput)
+        );
+
+        await interaction.showModal(modal);
+        return;
+      }
+
+      if (sub === "delete") {
+        const panelId = interaction.options.getString("panel_id", true);
+        const deleteMessage = interaction.options.getBoolean("delete_message") ?? true;
+
+        const panel = await prisma.role_panels.findUnique({ where: { id: panelId } });
+        if (!panel) {
+          await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
+          return;
+        }
+
+        // 게시된 메시지 삭제 시도
+        if (deleteMessage && panel.published_channel_id && panel.published_message_id) {
+          try {
+            const channel = interaction.guild?.channels.cache.get(panel.published_channel_id);
+            if (channel?.type === ChannelType.GuildText) {
+              const message = await channel.messages.fetch(panel.published_message_id);
+              await message.delete();
+            }
+          } catch (error) {
+            context.logger.warn({ err: error }, "Failed to delete panel message");
+          }
+        }
+
+        // DB에서 패널 항목 및 패널 삭제
+        await prisma.role_panel_items.deleteMany({ where: { panel_id: panelId } });
+        await prisma.role_panels.delete({ where: { id: panelId } });
+
+        await interaction.reply({ content: "패널을 삭제했습니다.", ephemeral: true });
+        return;
+      }
+
+      if (sub === "edit_item") {
+        const panelId = interaction.options.getString("panel_id", true);
+        const oldEmojiInput = interaction.options.getString("old_emoji", true);
+        const oldEmojiId = isCustomEmoji(oldEmojiInput);
+
+        if (!oldEmojiId) {
+          await interaction.reply({ content: "유효한 커스텀 이모지를 입력하세요.", ephemeral: true });
+          return;
+        }
+
+        // 기존 항목 찾기
+        const existingItem = await prisma.role_panel_items.findFirst({
+          where: { panel_id: panelId, emoji_id: oldEmojiId },
+        });
+
+        if (!existingItem) {
+          await interaction.reply({ content: "해당 이모지의 레이블을 찾을 수 없습니다.", ephemeral: true });
+          return;
+        }
+
+        // 업데이트할 데이터 준비
+        const updateData: any = {};
+
+        const newEmojiInput = interaction.options.getString("new_emoji", false);
+        if (newEmojiInput) {
+          const newEmojiId = isCustomEmoji(newEmojiInput);
+          if (!newEmojiId) {
+            await interaction.reply({ content: "새 이모지가 유효하지 않습니다.", ephemeral: true });
+            return;
+          }
+          updateData.emoji_id = newEmojiId;
+        }
+
+        const newRole = interaction.options.getRole("role", false);
+        if (newRole) {
+          updateData.role_id = newRole.id;
+        }
+
+        const newLabel = interaction.options.getString("label", false);
+        if (newLabel !== null) {
+          updateData.label = newLabel;
+        }
+
+        const newOrder = interaction.options.getInteger("order", false);
+        if (newOrder !== null) {
+          updateData.sort_order = newOrder;
+        }
+
+        // 업데이트할 항목이 없는 경우
+        if (Object.keys(updateData).length === 0) {
+          await interaction.reply({ content: "수정할 항목을 하나 이상 지정해주세요.", ephemeral: true });
+          return;
+        }
+
+        try {
+          await prisma.role_panel_items.update({
+            where: { id: existingItem.id },
+            data: updateData,
+          });
+          await interaction.reply({ content: "레이블을 수정했습니다. `/panel publish`로 변경사항을 적용하세요.", ephemeral: true });
+        } catch (error) {
+          context.logger.error({ err: error }, "Failed to update panel item");
+          await interaction.reply({ content: "레이블 수정에 실패했습니다.", ephemeral: true });
+        }
+        return;
+      }
     },
   },
 ];
+
+async function handleModalSubmit(interaction: ModalSubmitInteraction, context: AppContext) {
+  const [prefix, panelId] = interaction.customId.split(":");
+  if (prefix !== "panel_edit" || !panelId) return;
+
+  const title = interaction.fields.getTextInputValue("title");
+  const description = interaction.fields.getTextInputValue("description");
+  const modeInput = interaction.fields.getTextInputValue("mode").toUpperCase();
+
+  // 디버깅: 실제 입력값 확인
+  context.logger.info({ title, description, mode: modeInput }, "Modal submit values");
+
+  // 모드 검증
+  if (modeInput !== "MULTI" && modeInput !== "SINGLE") {
+    await interaction.reply({ content: "모드는 MULTI 또는 SINGLE만 입력 가능합니다.", ephemeral: true });
+    return;
+  }
+
+  const mode = modeInput as PanelMode;
+
+  try {
+    await context.db.role_panels.update({
+      where: { id: panelId },
+      data: { title, description, mode },
+    });
+    await interaction.reply({ content: "패널을 수정했습니다. `/panel publish`로 변경사항을 적용하세요.", ephemeral: true });
+  } catch (error) {
+    context.logger.error({ err: error }, "Failed to update panel");
+    await interaction.reply({ content: "패널 수정에 실패했습니다.", ephemeral: true });
+  }
+}
 
 const rolePanelsModule: BotModule = {
   name: "rolePanels",
@@ -412,6 +644,9 @@ const rolePanelsModule: BotModule = {
     client.on("interactionCreate", async (interaction) => {
       if (interaction.isButton() && interaction.customId.startsWith(BUTTON_PREFIX)) {
         await handleButton(interaction, context);
+      }
+      if (interaction.isModalSubmit() && interaction.customId.startsWith("panel_edit:")) {
+        await handleModalSubmit(interaction, context);
       }
     });
   },
