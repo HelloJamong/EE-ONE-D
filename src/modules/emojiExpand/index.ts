@@ -21,16 +21,28 @@ const emojiExpandModule: BotModule = {
       const emoji = extractCustomEmoji(message.content);
       if (!emoji) return;
 
-      try {
-        const embed = new EmbedBuilder()
-          .setTitle("커스텀 이모지")
-          .setImage(`https://cdn.discordapp.com/emojis/${emoji.id}.${emoji.animated ? "gif" : "png"}?size=1024`)
-          .setColor(0x5865f2);
+      const ext = emoji.animated ? "gif" : "png";
+      const imageUrl = `https://cdn.discordapp.com/emojis/${emoji.id}.${ext}?size=256`;
 
+      const embed = new EmbedBuilder()
+        .setAuthor({
+          name: message.member?.displayName ?? message.author.username,
+          iconURL: message.author.displayAvatarURL({ size: 64 }),
+        })
+        .setImage(imageUrl)
+        .setColor(message.member?.displayColor ?? 0x5865f2)
+        .setTimestamp(message.createdAt);
+
+      try {
         await message.delete();
+      } catch (deleteError) {
+        logger.warn({ err: deleteError, channelId: message.channelId, authorId: message.author.id }, "Failed to delete original message");
+      }
+
+      try {
         await message.channel.send({ embeds: [embed] });
-      } catch (error) {
-        logger.warn({ err: error }, "Failed to expand emoji");
+      } catch (sendError) {
+        logger.warn({ err: sendError }, "Failed to send expanded emoji");
       }
     });
   },
