@@ -15,12 +15,13 @@ enum PanelMode {
 }
 
 model guild_settings {
-  guild_id              String   @id
-  role_panel_channel_id String?
+  guild_id                String   @id
+  role_panel_channel_id   String?
   admin_config_channel_id String?
-  log_channel_id        String?
-  audit_enabled         Boolean  @default(false)
-  updated_at            DateTime @updatedAt
+  log_channel_id          String?
+  notification_channel_id String?
+  audit_enabled           Boolean  @default(false)
+  updated_at              DateTime @updatedAt
 
   role_panels role_panels[]
   audit_events audit_events[]

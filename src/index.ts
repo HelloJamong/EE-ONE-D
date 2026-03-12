@@ -11,6 +11,7 @@ import dcEmbedModule from "./modules/dcEmbed/index.js";
 import auditModule from "./modules/audit/index.js";
 import customCommandsModule from "./modules/customCommands/index.js";
 import roleStatsModule from "./modules/roleStats/index.js";
+import notificationsModule from "./modules/notifications/index.js";
 
 const config = loadConfig();
 const logger = createLogger(config);
@@ -36,6 +37,7 @@ const modules: BotModule[] = [
   auditModule,
   customCommandsModule,
   roleStatsModule,
+  notificationsModule,
 ];
 
 const commands: SlashCommand[] = modules.flatMap((mod) => mod.commands ?? []);

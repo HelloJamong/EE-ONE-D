@@ -24,7 +24,7 @@
 
 ### 2. 관리자 설정 (`src/modules/config/`)
 - `/config set/show` 명령어
-- admin 채널, panel 채널, log 채널 설정
+- admin 채널, panel 채널, log 채널, notification 채널 설정
 - `Administrator` 권한 필요
 
 ### 3. 감사 로그 (`src/modules/audit/`)
@@ -49,6 +49,14 @@
 - `/role stats <역할>` - 특정 역할 보유 사용자 목록 조회
 - `/role list` - 전체 역할과 사용자 수 통계
 
+### 8. 공지사항 관리 (`src/modules/notifications/`)
+- `/config set notification_channel` - 공지사항 채널 설정
+- `/noti send` - Modal로 공지 작성 및 발송
+- `/noti edit <메시지ID>` - 공지 수정
+- `/noti remove <메시지ID>` - 공지 삭제
+- 관리자 전용, admin_config_channel에서만 사용 가능
+- 감사 로그 자동 기록
+
 ## 프로젝트 구조
 
 ```
@@ -61,6 +69,7 @@ src/
 │   ├── customCommands/   # 커스텀 명령어
 │   ├── dcEmbed/          # 디시인사이드 미리보기
 │   ├── emojiExpand/      # 이모지 확대
+│   ├── notifications/    # 공지사항 관리
 │   ├── rolePanels/       # 역할 패널
 │   └── roleStats/        # 역할 통계
 └── shared/               # 공유 유틸리티
@@ -73,7 +82,7 @@ src/
 
 ## 데이터베이스 스키마
 
-- `guild_settings`: 길드별 채널 설정
+- `guild_settings`: 길드별 채널 설정 (role_panel, admin_config, log, notification)
 - `role_panels`: 역할 패널 정보 (MULTI/SINGLE 모드)
 - `role_panel_items`: 패널 내 역할 항목
 - `audit_events`: 감사 로그 이벤트
