@@ -74,14 +74,7 @@ NODE_ENV=production
 LOG_LEVEL=info
 ```
 
-**Discord 봇 토큰 발급 방법:**
-1. [Discord Developer Portal](https://discord.com/developers/applications)에서 애플리케이션 생성
-2. Bot 섹션에서 토큰 복사
-3. Privileged Gateway Intents 활성화: `SERVER MEMBERS INTENT`, `MESSAGE CONTENT INTENT`
-
-**Discord 서버 ID (Guild ID) 확인:**
-1. Discord 설정 → 앱 설정 → 고급 → 개발자 모드 활성화
-2. 서버 우클릭 → "서버 ID 복사"
+> 💡 Discord 봇 토큰 발급 및 권한 설정 방법은 [Discord 봇 설정 가이드](docs/discord-setup.md)를 참고하세요.
 
 ### 4. 봇 실행
 
@@ -96,28 +89,9 @@ docker compose logs -f bot
 docker compose ps
 ```
 
-봇이 정상적으로 시작되면 다음과 같은 로그가 표시됩니다:
-```
-Starting EE-ONE-D bot
-Bot is ready
-```
-
 ### 5. 봇 초대
 
-봇을 Discord 서버에 초대하려면 다음 URL을 생성하여 브라우저에서 엽니다:
-
-```
-https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=268445760&scope=bot%20applications.commands
-```
-
-**YOUR_CLIENT_ID**를 실제 클라이언트 ID로 변경하세요.
-
-**필수 권한:**
-- Manage Roles (역할 관리)
-- Read Messages/View Channels (메시지 읽기/채널 보기)
-- Send Messages (메시지 전송)
-- Manage Messages (메시지 관리)
-- Embed Links (링크 임베드)
+> 💡 봇 초대 URL 생성 및 필수 권한 설정 방법은 [Discord 봇 설정 가이드](docs/discord-setup.md)를 참고하세요.
 
 ---
 
@@ -182,43 +156,7 @@ docker compose up -d
 
 ## 문제 해결
 
-### 봇이 시작되지 않아요
-
-```bash
-# 로그 확인
-docker compose logs bot
-
-# 일반적인 원인:
-# - 잘못된 Discord 토큰 → .env 파일 확인
-# - 데이터베이스 연결 실패 → docker compose ps로 DB 상태 확인
-```
-
-### 데이터베이스 초기화
-
-```bash
-# 컨테이너 중지 및 제거
-docker compose down
-
-# 볼륨 삭제 (데이터 초기화)
-docker volume rm eeoned_db-data
-
-# 재시작
-docker compose up -d
-```
-
-### 이미지 수동 다운로드
-
-```bash
-# 특정 버전 다운로드
-docker pull igor0670/ee-one-d:v1.0.0
-
-# 최신 버전 다운로드
-docker pull igor0670/ee-one-d:latest
-```
-
-더 많은 문제 해결 방법은 [배포 가이드](DEPLOYMENT.md)를 참고하세요.
-
----
+문제가 발생했나요? [문제 해결 가이드](docs/TROUBLESHOOTING.md)에서 자주 묻는 질문과 해결 방법을 확인하세요.
 
 ## 로컬 개발
 
@@ -239,9 +177,6 @@ docker compose up --build -d
 # 또는 호스트에서 직접 실행 (개발 모드)
 npm install
 npm run dev
-```
-
-자세한 개발 가이드는 [DEPLOYMENT.md](DEPLOYMENT.md)를 참고하세요.
 
 ---
 
@@ -260,7 +195,8 @@ npm run dev
 ## 문서
 
 - [명령어 가이드](docs/COMMANDS.md) - 모든 명령어 사용법
-- [배포 가이드](DEPLOYMENT.md) - 상세 배포 및 운영 가이드
+- [Discord 봇 설정](docs/discord-setup.md) - Discord 봇 계정 생성 및 토큰 발급 가이드
+- [문제 해결 가이드](docs/TROUBLESHOOTING.md) - FAQ 및 문제 해결 방법
 
 ---
 
