@@ -25,8 +25,8 @@ export function validateResponse(response: string): { valid: boolean; error?: st
     return { valid: false, error: "응답 내용을 입력해주세요." };
   }
 
-  if (response.length > 2000) {
-    return { valid: false, error: "응답은 최대 2000자까지 입력 가능합니다." };
+  if (response.length > 4000) {
+    return { valid: false, error: "응답은 최대 4000자까지 입력 가능합니다." };
   }
 
   return { valid: true };

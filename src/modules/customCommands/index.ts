@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
 import { handleAddCommand, handleEditCommand, handleRemoveCommand, handleListCommand, handleReloadCommand } from "./handlers.js";
+import { handleAddModal, handleEditModal } from "./modals.js";
 
 function ensureAdministrator(interaction: ChatInputCommandInteraction) {
   if (!interaction.memberPermissions?.has("Administrator")) {
@@ -16,48 +17,18 @@ const commands = [
       .addSubcommand((sub) =>
         sub
           .setName("add")
-          .setDescription("새 커스텀 명령어를 추가합니다.")
-          .addStringOption((opt) =>
-            opt
-              .setName("name")
-              .setDescription("명령어 이름 (소문자, 숫자, _, - 만 사용, 1-32자)")
-              .setRequired(true)
-          )
-          .addStringOption((opt) =>
-            opt
-              .setName("response")
-              .setDescription("명령어 실행 시 출력할 텍스트 (최대 2000자)")
-              .setRequired(true)
-          )
-          .addStringOption((opt) =>
-            opt
-              .setName("description")
-              .setDescription("명령어 미리보기 설명 (최대 100자, 선택사항)")
-              .setRequired(false)
-          )
+          .setDescription("새 커스텀 명령어를 추가합니다. (Modal 입력)")
       )
       .addSubcommand((sub) =>
         sub
           .setName("edit")
-          .setDescription("기존 커스텀 명령어를 수정합니다.")
+          .setDescription("기존 커스텀 명령어를 수정합니다. (Modal 입력)")
           .addStringOption((opt) =>
             opt
               .setName("name")
               .setDescription("수정할 명령어 이름")
               .setRequired(true)
               .setAutocomplete(true)
-          )
-          .addStringOption((opt) =>
-            opt
-              .setName("response")
-              .setDescription("새로운 응답 내용 (최대 2000자, 선택사항)")
-              .setRequired(false)
-          )
-          .addStringOption((opt) =>
-            opt
-              .setName("description")
-              .setDescription("새로운 미리보기 설명 (최대 100자, 선택사항)")
-              .setRequired(false)
           )
       )
       .addSubcommand((sub) =>
@@ -125,8 +96,8 @@ const customCommandsModule: BotModule = {
   name: "customCommands",
   commands,
   register: (context) => {
-    // 자동완성 핸들러 등록
     context.client.on("interactionCreate", async (interaction) => {
+      // 자동완성 핸들러
       if (interaction.isAutocomplete() && interaction.commandName === "cmd") {
         const focusedOption = interaction.options.getFocused(true);
         if (focusedOption.name === "name") {
@@ -140,6 +111,15 @@ const customCommandsModule: BotModule = {
           await interaction.respond(
             filtered.map((cmd) => ({ name: cmd.name, value: cmd.name }))
           );
+        }
+      }
+
+      // Modal submit 핸들러
+      if (interaction.isModalSubmit()) {
+        if (interaction.customId === "cmd_add_modal") {
+          await handleAddModal(interaction, context);
+        } else if (interaction.customId.startsWith("cmd_edit_modal:")) {
+          await handleEditModal(interaction, context);
         }
       }
     });

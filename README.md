@@ -73,9 +73,6 @@ DATABASE_URL=postgresql://postgres:postgres@db:5432/eeoned?schema=public
 NODE_ENV=production
 LOG_LEVEL=info
 ```
-
-> 💡 Discord 봇 토큰 발급 및 권한 설정 방법은 [Discord 봇 설정 가이드](docs/discord-setup.md)를 참고하세요.
-
 ### 4. 봇 실행
 
 ```bash

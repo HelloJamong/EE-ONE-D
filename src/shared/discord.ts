@@ -122,12 +122,9 @@ export async function dispatchCommand(
       const responses = customCommand.response.split("|||").map((r) => r.trim());
       const selectedResponse = responses[Math.floor(Math.random() * responses.length)];
 
-      // 2. 줄바꿈 처리: \n을 실제 줄바꿈으로 변환
-      const processedResponse = selectedResponse.replace(/\\n/g, "\n");
-
-      // 3. 임베드 처리: EMBED:로 시작하면 임베드로 전송
-      if (processedResponse.startsWith("EMBED:")) {
-        const content = processedResponse.slice(6); // "EMBED:" 제거
+      // 2. 임베드 처리: EMBED:로 시작하면 임베드로 전송
+      if (selectedResponse.startsWith("EMBED:")) {
+        const content = selectedResponse.slice(6); // "EMBED:" 제거
         const parts = content.split("|||").map((p) => p.trim());
 
         const title = parts[0] || "공지";
@@ -143,7 +140,7 @@ export async function dispatchCommand(
         await interaction.reply({ embeds: [embed], ephemeral: false });
       } else {
         // 일반 텍스트 응답
-        await interaction.reply({ content: processedResponse, ephemeral: false });
+        await interaction.reply({ content: selectedResponse, ephemeral: false });
       }
     } catch (error) {
       context.logger.error({ err: error }, "Custom command execution failed");
