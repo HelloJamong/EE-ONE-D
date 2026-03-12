@@ -177,7 +177,7 @@ docker compose up --build -d
 # 또는 호스트에서 직접 실행 (개발 모드)
 npm install
 npm run dev
-
+```
 ---
 
 ## 기술 스택
