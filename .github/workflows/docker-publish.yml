@@ -58,14 +58,21 @@ jobs:
             echo "Release $VERSION" > release-notes.md
           fi
 
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          cp .env.example release-assets/.env.example
+          cp docker-compose.yml release-assets/docker-compose.yml
+          ls -la release-assets/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           name: Release ${{ steps.version.outputs.version }}
           body_path: release-notes.md
           files: |
-            .env.example
-            docker-compose.yml
+            release-assets/.env.example
+            release-assets/docker-compose.yml
           draft: false
           prerelease: false
         env:
