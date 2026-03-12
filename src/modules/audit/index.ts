@@ -31,7 +31,8 @@ async function fetchSettings(context: AppContext, guildId: string) {
 
 async function isAuditEnabled(context: AppContext, guildId: string): Promise<boolean> {
   const settings = await fetchSettings(context, guildId);
-  return settings?.audit_enabled === true && !!settings?.log_channel_id;
+  // log_channel_id가 설정되어 있으면 자동으로 감사 로그 활성화
+  return !!settings?.log_channel_id;
 }
 
 interface SendLogOptions {
@@ -87,139 +88,9 @@ function displayUser(user: any) {
   return `${user?.tag ?? user?.username ?? "unknown"} (${user?.id ?? "-"})`;
 }
 
-const commands = [
-  {
-    data: new SlashCommandBuilder()
-      .setName("audit")
-      .setDescription("감사 로그를 관리합니다.")
-      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommand((sub) =>
-        sub.setName("on").setDescription("감사 로그를 활성화합니다.")
-      )
-      .addSubcommand((sub) =>
-        sub.setName("off").setDescription("감사 로그를 비활성화합니다.")
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName("channel")
-          .setDescription("로그 채널을 설정합니다.")
-          .addChannelOption((opt) =>
-            opt
-              .setName("channel")
-              .setDescription("로그를 기록할 채널")
-              .addChannelTypes(ChannelType.GuildText)
-              .setRequired(true)
-          )
-      )
-      .addSubcommand((sub) =>
-        sub.setName("status").setDescription("현재 감사 로그 설정을 확인합니다.")
-      ),
-    handle: async (interaction: ChatInputCommandInteraction, context: AppContext) => {
-      const guildId = interaction.guildId!;
-      const prisma = context.db;
-      const sub = interaction.options.getSubcommand();
-
-      const settings = await prisma.guild_settings.findUnique({
-        where: { guild_id: guildId },
-      });
-
-      if (sub === "status") {
-        const status = settings?.audit_enabled ? "활성화" : "비활성화";
-        const channel = settings?.log_channel_id ? `<#${settings.log_channel_id}>` : "미설정";
-        await interaction.reply({
-          content: `**감사 로그 상태**\n상태: ${status}\n채널: ${channel}`,
-          ephemeral: true,
-        });
-        return;
-      }
-
-      if (sub === "on") {
-        if (!settings?.log_channel_id) {
-          await interaction.reply({
-            content: "먼저 `/audit channel` 명령어로 로그 채널을 설정해주세요.",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        const channel = interaction.guild?.channels.cache.get(settings.log_channel_id);
-        if (!channel || channel.type !== ChannelType.GuildText) {
-          await interaction.reply({
-            content: "설정된 로그 채널에 접근할 수 없습니다. 채널을 다시 설정해주세요.",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        const botMember = interaction.guild?.members.me;
-        const permissions = channel.permissionsFor(botMember!);
-        if (!permissions?.has("SendMessages") || !permissions?.has("EmbedLinks")) {
-          await interaction.reply({
-            content: "봇이 해당 채널에 메시지를 보낼 권한이 없습니다. 채널 권한을 확인해주세요.",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        await prisma.guild_settings.upsert({
-          where: { guild_id: guildId },
-          create: { guild_id: guildId, audit_enabled: true, log_channel_id: settings.log_channel_id },
-          update: { audit_enabled: true },
-        });
-
-        await interaction.reply({ content: "감사 로그가 활성화되었습니다.", ephemeral: true });
-        return;
-      }
-
-      if (sub === "off") {
-        await prisma.guild_settings.upsert({
-          where: { guild_id: guildId },
-          create: { guild_id: guildId, audit_enabled: false },
-          update: { audit_enabled: false },
-        });
-
-        await interaction.reply({ content: "감사 로그가 비활성화되었습니다.", ephemeral: true });
-        return;
-      }
-
-      if (sub === "channel") {
-        const channelOption = interaction.options.getChannel("channel", true);
-        if (channelOption.type !== ChannelType.GuildText) {
-          await interaction.reply({ content: "텍스트 채널만 설정할 수 있습니다.", ephemeral: true });
-          return;
-        }
-
-        const channel = interaction.guild?.channels.cache.get(channelOption.id);
-        if (!channel || channel.type !== ChannelType.GuildText) {
-          await interaction.reply({ content: "채널을 찾을 수 없습니다.", ephemeral: true });
-          return;
-        }
-
-        const botMember = interaction.guild?.members.me;
-        const permissions = channel.permissionsFor(botMember!);
-        if (!permissions?.has("SendMessages") || !permissions?.has("EmbedLinks")) {
-          await interaction.reply({
-            content: "봇이 해당 채널에 메시지를 보낼 권한이 없습니다. 채널 권한을 확인해주세요.",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        await prisma.guild_settings.upsert({
-          where: { guild_id: guildId },
-          create: { guild_id: guildId, log_channel_id: channel.id },
-          update: { log_channel_id: channel.id },
-        });
-
-        await interaction.reply({
-          content: `로그 채널이 <#${channel.id}>로 설정되었습니다.\n\`/audit on\` 명령어로 감사 로그를 활성화할 수 있습니다.`,
-          ephemeral: true,
-        });
-        return;
-      }
-    },
-  },
-];
+// /audit 명령어는 제거되었습니다.
+// /config set log_channel 명령어로 로그 채널을 설정하면 자동으로 감사 로그가 활성화됩니다.
+const commands: any[] = [];
 
 const auditModule: BotModule = {
   name: "audit",

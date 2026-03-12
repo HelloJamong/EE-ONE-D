@@ -27,7 +27,7 @@ const emojiExpandModule: BotModule = {
       const embed = new EmbedBuilder()
         .setAuthor({
           name: message.member?.displayName ?? message.author.username,
-          iconURL: message.author.displayAvatarURL({ size: 64 }),
+          iconURL: message.member?.displayAvatarURL({ size: 64 }) ?? message.author.displayAvatarURL({ size: 64 }),
         })
         .setImage(imageUrl)
         .setColor(message.member?.displayColor ?? 0x5865f2)

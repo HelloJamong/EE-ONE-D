@@ -87,12 +87,14 @@ const commands = [
       });
 
       if (sub === "show") {
+        const auditStatus = settings?.log_channel_id ? "활성화 (자동)" : "비활성화";
         await interaction.reply({
           content: [
             `role_panel_channel_id: ${settings?.role_panel_channel_id ?? "-"}`,
             `admin_config_channel_id: ${settings?.admin_config_channel_id ?? "-"}`,
             `log_channel_id: ${settings?.log_channel_id ?? "-"}`,
             `notification_channel_id: ${settings?.notification_channel_id ?? "-"}`,
+            `감사 로그: ${auditStatus}`,
             `updated_at: ${settings?.updated_at?.toISOString() ?? "-"}`,
           ].join("\n"),
           ephemeral: true,
@@ -137,6 +139,10 @@ const commands = [
         notification_channel_id: updated.notification_channel_id,
       });
 
+      const auditStatusMessage = updated.log_channel_id
+        ? "\n\n✅ 감사 로그가 자동으로 활성화되었습니다."
+        : "";
+
       await interaction.reply({
         content: [
           "설정을 갱신했습니다.",
@@ -144,7 +150,7 @@ const commands = [
           `admin_config_channel_id: ${updated.admin_config_channel_id ?? "-"}`,
           `log_channel_id: ${updated.log_channel_id ?? "-"}`,
           `notification_channel_id: ${updated.notification_channel_id ?? "-"}`,
-        ].join("\n"),
+        ].join("\n") + auditStatusMessage,
         ephemeral: true,
       });
     },

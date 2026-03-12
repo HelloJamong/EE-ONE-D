@@ -261,7 +261,6 @@ npm run dev
 
 - [명령어 가이드](docs/COMMANDS.md) - 모든 명령어 사용법
 - [배포 가이드](DEPLOYMENT.md) - 상세 배포 및 운영 가이드
-- [기술 문서](.claude/CLAUDE.md) - 프로젝트 구조 및 개발 가이드
 
 ---
 
@@ -270,9 +269,3 @@ npm run dev
 MIT License
 
 ---
-
-## 지원
-
-- 이슈 리포트: [GitHub Issues](https://github.com/HelloJamong/EE-ONE-D/issues)
-- 최신 릴리즈: [GitHub Releases](https://github.com/HelloJamong/EE-ONE-D/releases)
-- Docker Hub: [igor0670/ee-one-d](https://hub.docker.com/r/igor0670/ee-one-d)

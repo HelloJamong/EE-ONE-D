@@ -53,7 +53,7 @@ function buildEmbed(message: Message, url: string, preview: { title: string; gal
   return new EmbedBuilder()
     .setAuthor({
       name: message.member?.displayName ?? message.author.username,
-      iconURL: message.author.displayAvatarURL({ size: 64 }),
+      iconURL: message.member?.displayAvatarURL({ size: 64 }) ?? message.author.displayAvatarURL({ size: 64 }),
     })
     .setTitle(preview.title)
     .setURL(url)
