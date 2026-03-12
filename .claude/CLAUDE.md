@@ -109,6 +109,44 @@ npm run migrate:deploy     # 배포 마이그레이션
 docker compose up --build -d
 ```
 
+## 배포 및 운영
+
+### Docker 컨테이너 구성
+
+프로젝트는 Docker Compose로 관리되며, 두 개의 서비스로 구성됩니다:
+
+#### DB 서비스
+- 이미지: `postgres:15-alpine`
+- 컨테이너 이름: `eeoned-db`
+- 볼륨: `db-data` (영속성 보장)
+- 기본 데이터베이스: `eeoned`
+- Health Check: `pg_isready` 기반 헬스체크 (10초 간격)
+- 재시작 정책: `unless-stopped`
+
+#### Bot 서비스
+- 이미지: `igor0670/ee-one-d:latest`
+- 컨테이너 이름: `eeoned-bot`
+- DB 서비스 health check 완료 후 시작
+- `.env` 파일에서 환경변수 로드
+- 재시작 정책: `unless-stopped`
+
+### 데이터베이스 마이그레이션
+
+**중요**: DB 스키마 변경 시 반드시 마이그레이션을 수행해야 합니다.
+
+```bash
+# 배포 환경에서 마이그레이션 적용
+npm run migrate:deploy
+
+# 또는 Docker 컨테이너 내에서
+docker compose exec bot npm run migrate:deploy
+```
+
+**주의사항**:
+- 이전 버전에서 새 버전으로 업데이트 시, DB 마이그레이션을 먼저 수행
+- 볼륨(`db-data`)에 데이터가 영속적으로 저장되므로 컨테이너 재생성 시에도 데이터 유지
+- 스키마 변경이 포함된 PR은 마이그레이션 파일도 함께 포함해야 함
+
 ## 환경 변수
 
 | 변수 | 설명 |
