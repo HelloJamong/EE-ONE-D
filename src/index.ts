@@ -10,6 +10,7 @@ import emojiExpandModule from "./modules/emojiExpand/index.js";
 import dcEmbedModule from "./modules/dcEmbed/index.js";
 import auditModule from "./modules/audit/index.js";
 import customCommandsModule from "./modules/customCommands/index.js";
+import roleStatsModule from "./modules/roleStats/index.js";
 
 const config = loadConfig();
 const logger = createLogger(config);
@@ -34,6 +35,7 @@ const modules: BotModule[] = [
   dcEmbedModule,
   auditModule,
   customCommandsModule,
+  roleStatsModule,
 ];
 
 const commands: SlashCommand[] = modules.flatMap((mod) => mod.commands ?? []);

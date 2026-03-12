@@ -45,6 +45,10 @@
 - 예약어 검증 (panel, config, cmd)
 - 감사 로그 자동 기록
 
+### 7. 역할 통계 (`src/modules/roleStats/`)
+- `/role stats <역할>` - 특정 역할 보유 사용자 목록 조회
+- `/role list` - 전체 역할과 사용자 수 통계
+
 ## 프로젝트 구조
 
 ```
@@ -57,7 +61,8 @@ src/
 │   ├── customCommands/   # 커스텀 명령어
 │   ├── dcEmbed/          # 디시인사이드 미리보기
 │   ├── emojiExpand/      # 이모지 확대
-│   └── rolePanels/       # 역할 패널
+│   ├── rolePanels/       # 역할 패널
+│   └── roleStats/        # 역할 통계
 └── shared/               # 공유 유틸리티
     ├── cache.ts          # 캐시 유틸
     ├── db.ts             # Prisma 클라이언트
