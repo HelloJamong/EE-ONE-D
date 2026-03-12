@@ -118,7 +118,33 @@ export async function dispatchCommand(
 
   if (customCommand) {
     try {
-      await interaction.reply({ content: customCommand.response, ephemeral: false });
+      // 1. 랜덤 응답 처리: |||로 구분된 여러 응답 중 하나 선택
+      const responses = customCommand.response.split("|||").map((r) => r.trim());
+      const selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+
+      // 2. 줄바꿈 처리: \n을 실제 줄바꿈으로 변환
+      const processedResponse = selectedResponse.replace(/\\n/g, "\n");
+
+      // 3. 임베드 처리: EMBED:로 시작하면 임베드로 전송
+      if (processedResponse.startsWith("EMBED:")) {
+        const content = processedResponse.slice(6); // "EMBED:" 제거
+        const parts = content.split("|||").map((p) => p.trim());
+
+        const title = parts[0] || "공지";
+        const description = parts[1] || "";
+
+        const { EmbedBuilder } = await import("discord.js");
+        const embed = new EmbedBuilder()
+          .setTitle(title)
+          .setDescription(description)
+          .setColor(0x5865f2)
+          .setTimestamp();
+
+        await interaction.reply({ embeds: [embed], ephemeral: false });
+      } else {
+        // 일반 텍스트 응답
+        await interaction.reply({ content: processedResponse, ephemeral: false });
+      }
     } catch (error) {
       context.logger.error({ err: error }, "Custom command execution failed");
       await interaction.reply({ content: "명령 실행 중 오류가 발생했습니다.", ephemeral: true });
