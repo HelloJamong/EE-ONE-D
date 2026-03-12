@@ -31,3 +31,19 @@ export function validateResponse(response: string): { valid: boolean; error?: st
 
   return { valid: true };
 }
+
+export function validateDescription(description: string | null): { valid: boolean; error?: string } {
+  if (description === null || description === undefined) {
+    return { valid: true }; // Optional field
+  }
+
+  if (description.length === 0) {
+    return { valid: false, error: "미리보기 설명을 입력해주세요. (비워두려면 입력하지 마세요)" };
+  }
+
+  if (description.length > 100) {
+    return { valid: false, error: "미리보기 설명은 최대 100자까지 입력 가능합니다." };
+  }
+
+  return { valid: true };
+}

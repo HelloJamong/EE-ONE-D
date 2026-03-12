@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
-import { handleAddCommand, handleRemoveCommand, handleListCommand, handleReloadCommand } from "./handlers.js";
+import { handleAddCommand, handleEditCommand, handleRemoveCommand, handleListCommand, handleReloadCommand } from "./handlers.js";
 
 function ensureAdministrator(interaction: ChatInputCommandInteraction) {
   if (!interaction.memberPermissions?.has("Administrator")) {
@@ -28,6 +28,36 @@ const commands = [
               .setName("response")
               .setDescription("명령어 실행 시 출력할 텍스트 (최대 2000자)")
               .setRequired(true)
+          )
+          .addStringOption((opt) =>
+            opt
+              .setName("description")
+              .setDescription("명령어 미리보기 설명 (최대 100자, 선택사항)")
+              .setRequired(false)
+          )
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("edit")
+          .setDescription("기존 커스텀 명령어를 수정합니다.")
+          .addStringOption((opt) =>
+            opt
+              .setName("name")
+              .setDescription("수정할 명령어 이름")
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+          .addStringOption((opt) =>
+            opt
+              .setName("response")
+              .setDescription("새로운 응답 내용 (최대 2000자, 선택사항)")
+              .setRequired(false)
+          )
+          .addStringOption((opt) =>
+            opt
+              .setName("description")
+              .setDescription("새로운 미리보기 설명 (최대 100자, 선택사항)")
+              .setRequired(false)
           )
       )
       .addSubcommand((sub) =>
@@ -73,6 +103,9 @@ const commands = [
       switch (sub) {
         case "add":
           await handleAddCommand(interaction, context);
+          break;
+        case "edit":
+          await handleEditCommand(interaction, context);
           break;
         case "remove":
           await handleRemoveCommand(interaction, context);

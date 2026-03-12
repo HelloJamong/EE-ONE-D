@@ -78,6 +78,7 @@ model custom_commands {
   id          String   @id @default(cuid())
   guild_id    String
   name        String
+  description String?  @db.VarChar(100)
   response    String   @db.Text
   created_by  String
   created_at  DateTime @default(now())
