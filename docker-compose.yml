@@ -18,6 +18,7 @@ services:
     restart: unless-stopped
 
   bot:
+    image: igor0670/ee-one-d:latest
     build: .
     container_name: eeoned-bot
     env_file:
