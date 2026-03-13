@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.10] - 2026-03-13
+
+### Fixed
+- 디시인사이드 임베드 생성 오류 수정
+  - Discord API의 빈 description 거부 문제 해결
+  - summary가 있을 때만 description 설정
+  - 게시글 미리보기 정상 작동
+- `/version` 명령어 개선
+  - GitHub Releases 페이지로 이동하는 클릭 가능한 링크 추가
+  - Description에 마크다운 링크 형식으로 제공
+
 ## [1.0.9] - 2026-03-13
 
 ### Fixed

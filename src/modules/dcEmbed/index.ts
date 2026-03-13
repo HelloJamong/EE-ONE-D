@@ -61,17 +61,23 @@ async function fetchPreview(url: string, logger: AppContext["logger"]) {
 }
 
 function buildEmbed(message: Message, url: string, preview: { title: string; gallery: string; summary?: string }) {
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setAuthor({
       name: message.member?.displayName ?? message.author.username,
       iconURL: message.member?.displayAvatarURL({ size: 64 }) ?? message.author.displayAvatarURL({ size: 64 }),
     })
     .setTitle(preview.title)
     .setURL(url)
-    .setDescription(preview.summary?.slice(0, 300) ?? "")
     .setFooter({ text: preview.gallery })
     .setColor(message.member?.displayColor ?? 0x0096ff)
     .setTimestamp(message.createdAt);
+
+  // summary가 있을 때만 description 설정 (빈 문자열은 에러 발생)
+  if (preview.summary && preview.summary.trim().length > 0) {
+    embed.setDescription(preview.summary.slice(0, 300));
+  }
+
+  return embed;
 }
 
 const dcEmbedModule: BotModule = {

@@ -52,13 +52,12 @@ const commands = [
 
         const embed = new EmbedBuilder()
           .setTitle("🤖 EE-ONE-D 봇 버전 정보")
-          .setDescription("현재 실행 중인 봇의 버전 정보입니다.")
+          .setDescription("현재 실행 중인 봇의 버전 정보입니다.\n\n[GitHub에서 최신 버전 확인하기](https://github.com/HelloJamong/EE-ONE-D/releases)")
           .addFields(
             { name: "📦 버전", value: `\`v${version}\``, inline: true },
             { name: "📅 최종 업데이트", value: date, inline: true }
           )
           .setColor(0x5865f2)
-          .setFooter({ text: "GitHub에서 최신 버전 확인하기" })
           .setTimestamp();
 
         await interaction.reply({ embeds: [embed], ephemeral: true });
