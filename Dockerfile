@@ -21,5 +21,6 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY prisma ./prisma
 COPY package.json ./
+COPY CHANGELOG.md ./
 
 CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/index.js"]

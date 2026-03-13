@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.8] - 2026-03-13
+
+### Fixed
+- `/welcome setup` 역할 5개 선택 시 오류 수정
+  - Discord Modal customId 100자 제한 문제 해결
+  - customId에 UUID 사용, role ID는 cache에 임시 저장
+  - 모든 개수의 역할 선택 정상 작동
+- `/version` 명령어 버전 정보 표시 오류 수정
+  - Docker 이미지에 CHANGELOG.md 파일 포함
+  - CHANGELOG.md 기반 버전 정보 정상 파싱
+
+### Technical
+- Dockerfile에 `COPY CHANGELOG.md ./` 추가
+- welcome 모듈: `crypto.randomBytes`로 session ID 생성
+- welcome setup/edit: cache 기반 role ID 관리
+
 ## [1.0.7] - 2026-03-13
 
 ### Added

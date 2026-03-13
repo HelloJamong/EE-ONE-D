@@ -13,6 +13,7 @@ import {
   TextInputStyle,
   ChannelType,
 } from "discord.js";
+import { randomBytes } from "crypto";
 import { BotModule, AppContext } from "../../types.js";
 
 const BUTTON_PREFIX = "welcome";
@@ -111,9 +112,13 @@ const commands = [
           return;
         }
 
+        // 짧은 UUID 생성 (customId 100자 제한 대응)
+        const sessionId = randomBytes(8).toString("hex");
+        context.cache.set(`welcome_setup:${sessionId}`, roleIds);
+
         // Modal 표시
         const modal = new ModalBuilder()
-          .setCustomId(`welcome_setup:${roleIds.join(",")}`)
+          .setCustomId(`welcome_setup:${sessionId}`)
           .setTitle("웰컴 메시지 설정");
 
         const titleInput = new TextInputBuilder()
@@ -169,9 +174,13 @@ const commands = [
           return;
         }
 
+        // 짧은 UUID 생성 (customId 100자 제한 대응)
+        const sessionId = randomBytes(8).toString("hex");
+        context.cache.set(`welcome_edit:${sessionId}`, existing.role_ids);
+
         // Modal 표시 (기존 값 채우기)
         const modal = new ModalBuilder()
-          .setCustomId(`welcome_edit:${existing.role_ids.join(",")}`)
+          .setCustomId(`welcome_edit:${sessionId}`)
           .setTitle("웰컴 메시지 수정");
 
         const titleInput = new TextInputBuilder()
@@ -266,8 +275,8 @@ const commands = [
 ];
 
 async function handleModalSubmit(interaction: ModalSubmitInteraction, context: AppContext) {
-  const [prefix, roleIdsStr] = interaction.customId.split(":");
-  if ((prefix !== "welcome_setup" && prefix !== "welcome_edit") || !roleIdsStr) return;
+  const [prefix, sessionId] = interaction.customId.split(":");
+  if ((prefix !== "welcome_setup" && prefix !== "welcome_edit") || !sessionId) return;
 
   // 즉시 응답 예약 (3초 타임아웃 방지)
   await interaction.deferReply({ ephemeral: true });
@@ -293,8 +302,22 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction, context: A
         });
         return;
       }
+
+      // cache 삭제
+      context.cache.delete(`welcome_edit:${sessionId}`);
     } else {
-      roleIds = roleIdsStr.split(",");
+      // setup 모드: cache에서 roleIds 가져오기
+      const cachedRoleIds = context.cache.get(`welcome_setup:${sessionId}`) as string[] | undefined;
+      if (!cachedRoleIds) {
+        await interaction.editReply({
+          content: "세션이 만료되었습니다. 다시 시도해주세요.",
+        });
+        return;
+      }
+      roleIds = cachedRoleIds;
+
+      // cache 삭제
+      context.cache.delete(`welcome_setup:${sessionId}`);
     }
 
     const settings = await context.db.guild_settings.findUnique({
