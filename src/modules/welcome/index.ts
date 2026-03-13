@@ -321,32 +321,31 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction, context: A
       return;
     }
 
-  // Embed 생성
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(content)
-    .setColor(0x5865f2);
+    // Embed 생성
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(content)
+      .setColor(0x5865f2);
 
-  // 버튼 생성
-  const button = new ButtonBuilder()
-    .setCustomId(`${BUTTON_PREFIX}:${interaction.guildId!}`)
-    .setStyle(ButtonStyle.Primary)
-    .setLabel(buttonLabel);
+    // 버튼 생성
+    const button = new ButtonBuilder()
+      .setCustomId(`${BUTTON_PREFIX}:${interaction.guildId!}`)
+      .setStyle(ButtonStyle.Primary)
+      .setLabel(buttonLabel);
 
-  if (buttonEmojiInput) {
-    const emoji = parseEmoji(buttonEmojiInput);
-    if (emoji) {
-      if (emoji.id) {
-        button.setEmoji({ id: emoji.id, name: emoji.name });
-      } else if (emoji.name) {
-        button.setEmoji(emoji.name);
+    if (buttonEmojiInput) {
+      const emoji = parseEmoji(buttonEmojiInput);
+      if (emoji) {
+        if (emoji.id) {
+          button.setEmoji({ id: emoji.id, name: emoji.name });
+        } else if (emoji.name) {
+          button.setEmoji(emoji.name);
+        }
       }
     }
-  }
 
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 
-  try {
     // 기존 메시지 확인
     const existing = await context.db.welcome_message.findUnique({
       where: { guild_id: interaction.guildId! },
