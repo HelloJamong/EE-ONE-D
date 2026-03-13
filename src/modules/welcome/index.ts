@@ -54,10 +54,37 @@ const commands = [
           .setDescription("웰컴 메시지를 설정합니다.")
           .addRoleOption((opt) =>
             opt
-              .setName("role")
-              .setDescription("버튼 클릭 시 부여할 역할")
+              .setName("role1")
+              .setDescription("버튼 클릭 시 부여할 역할 1")
               .setRequired(true)
           )
+          .addRoleOption((opt) =>
+            opt
+              .setName("role2")
+              .setDescription("버튼 클릭 시 부여할 역할 2 (선택)")
+              .setRequired(false)
+          )
+          .addRoleOption((opt) =>
+            opt
+              .setName("role3")
+              .setDescription("버튼 클릭 시 부여할 역할 3 (선택)")
+              .setRequired(false)
+          )
+          .addRoleOption((opt) =>
+            opt
+              .setName("role4")
+              .setDescription("버튼 클릭 시 부여할 역할 4 (선택)")
+              .setRequired(false)
+          )
+          .addRoleOption((opt) =>
+            opt
+              .setName("role5")
+              .setDescription("버튼 클릭 시 부여할 역할 5 (선택)")
+              .setRequired(false)
+          )
+      )
+      .addSubcommand((sub) =>
+        sub.setName("edit").setDescription("웰컴 메시지를 수정합니다.")
       )
       .addSubcommand((sub) =>
         sub.setName("remove").setDescription("웰컴 메시지를 삭제합니다.")
@@ -85,11 +112,20 @@ const commands = [
       const sub = interaction.options.getSubcommand();
 
       if (sub === "setup") {
-        const role = interaction.options.getRole("role", true);
+        const roleIds: string[] = [];
+        for (let i = 1; i <= 5; i++) {
+          const role = interaction.options.getRole(`role${i}`, i === 1);
+          if (role) roleIds.push(role.id);
+        }
+
+        if (roleIds.length === 0) {
+          await interaction.reply({ content: "최소 1개 이상의 역할을 지정해야 합니다.", ephemeral: true });
+          return;
+        }
 
         // Modal 표시
         const modal = new ModalBuilder()
-          .setCustomId(`welcome_setup:${role.id}`)
+          .setCustomId(`welcome_setup:${roleIds.join(",")}`)
           .setTitle("웰컴 메시지 설정");
 
         const titleInput = new TextInputBuilder()
@@ -132,6 +168,74 @@ const commands = [
         return;
       }
 
+      if (sub === "edit") {
+        const existing = await context.db.welcome_message.findUnique({
+          where: { guild_id: interaction.guildId! },
+        });
+
+        if (!existing) {
+          await interaction.reply({ content: "설정된 웰컴 메시지가 없습니다.", ephemeral: true });
+          return;
+        }
+
+        // Modal 표시 (기존 값 채우기)
+        const modal = new ModalBuilder()
+          .setCustomId(`welcome_edit:${existing.role_ids.join(",")}`)
+          .setTitle("웰컴 메시지 수정");
+
+        const titleInput = new TextInputBuilder()
+          .setCustomId("title")
+          .setLabel("제목")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(256)
+          .setValue(existing.title)
+          .setRequired(true);
+
+        const contentInput = new TextInputBuilder()
+          .setCustomId("content")
+          .setLabel("내용")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMaxLength(4000)
+          .setValue(existing.content)
+          .setRequired(true);
+
+        const buttonEmojiInput = new TextInputBuilder()
+          .setCustomId("button_emoji")
+          .setLabel("버튼 이모지 (선택사항)")
+          .setPlaceholder("예: 👍 또는 <:emoji:123456789>")
+          .setStyle(TextInputStyle.Short)
+          .setValue(existing.button_emoji || "")
+          .setRequired(false);
+
+        const buttonLabelInput = new TextInputBuilder()
+          .setCustomId("button_label")
+          .setLabel("버튼 레이블")
+          .setPlaceholder("예: 규칙에 동의합니다")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(80)
+          .setValue(existing.button_label)
+          .setRequired(true);
+
+        const rolesInput = new TextInputBuilder()
+          .setCustomId("role_ids")
+          .setLabel("역할 ID (쉼표로 구분)")
+          .setPlaceholder("예: 123456789, 987654321")
+          .setStyle(TextInputStyle.Short)
+          .setValue(existing.role_ids.join(", "))
+          .setRequired(true);
+
+        modal.addComponents(
+          new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(contentInput),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(buttonEmojiInput),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(buttonLabelInput),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(rolesInput)
+        );
+
+        await interaction.showModal(modal);
+        return;
+      }
+
       if (sub === "remove") {
         const existing = await context.db.welcome_message.findUnique({
           where: { guild_id: interaction.guildId! },
@@ -167,13 +271,33 @@ const commands = [
 ];
 
 async function handleModalSubmit(interaction: ModalSubmitInteraction, context: AppContext) {
-  const [prefix, roleId] = interaction.customId.split(":");
-  if (prefix !== "welcome_setup" || !roleId) return;
+  const [prefix, roleIdsStr] = interaction.customId.split(":");
+  if ((prefix !== "welcome_setup" && prefix !== "welcome_edit") || !roleIdsStr) return;
 
   const title = interaction.fields.getTextInputValue("title");
   const content = interaction.fields.getTextInputValue("content");
   const buttonEmojiInput = interaction.fields.getTextInputValue("button_emoji") || null;
   const buttonLabel = interaction.fields.getTextInputValue("button_label");
+
+  // edit 모드에서는 role_ids를 Modal에서 받음
+  let roleIds: string[];
+  if (prefix === "welcome_edit") {
+    const roleIdsInput = interaction.fields.getTextInputValue("role_ids");
+    roleIds = roleIdsInput
+      .split(",")
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0);
+
+    if (roleIds.length === 0) {
+      await interaction.reply({
+        content: "최소 1개 이상의 역할 ID를 지정해야 합니다.",
+        ephemeral: true,
+      });
+      return;
+    }
+  } else {
+    roleIds = roleIdsStr.split(",");
+  }
 
   const settings = await context.db.guild_settings.findUnique({
     where: { guild_id: interaction.guildId! },
@@ -253,7 +377,7 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction, context: A
         content,
         button_emoji: buttonEmojiInput,
         button_label: buttonLabel,
-        role_id: roleId,
+        role_ids: roleIds,
       },
       update: {
         channel_id: channel.id,
@@ -262,12 +386,13 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction, context: A
         content,
         button_emoji: buttonEmojiInput,
         button_label: buttonLabel,
-        role_id: roleId,
+        role_ids: roleIds,
       },
     });
 
+    const rolesMention = roleIds.map((id) => `<@&${id}>`).join(", ");
     await interaction.reply({
-      content: `웰컴 메시지를 설정했습니다.\n채널: <#${channel.id}>\n역할: <@&${roleId}>`,
+      content: `웰컴 메시지를 ${prefix === "welcome_edit" ? "수정" : "설정"}했습니다.\n채널: <#${channel.id}>\n역할: ${rolesMention}`,
       ephemeral: true,
     });
   } catch (error) {
@@ -296,18 +421,11 @@ async function handleButton(interaction: ButtonInteraction, context: AppContext)
   }
 
   const member = interaction.member as GuildMember;
-  const role = interaction.guild!.roles.cache.get(welcomeMsg.role_id);
 
-  if (!role) {
-    await interaction.reply({
-      content: "역할을 찾을 수 없습니다.",
-      ephemeral: true,
-    });
-    return;
-  }
+  // 모든 역할이 이미 있는지 확인
+  const hasAllRoles = welcomeMsg.role_ids.every((roleId) => member.roles.cache.has(roleId));
 
-  // 이미 역할이 있는지 확인
-  if (member.roles.cache.has(role.id)) {
+  if (hasAllRoles) {
     await interaction.reply({
       content: "이미 인증되었습니다.",
       ephemeral: true,
@@ -315,14 +433,34 @@ async function handleButton(interaction: ButtonInteraction, context: AppContext)
     return;
   }
 
-  try {
-    await member.roles.add(role);
+  // 존재하는 역할만 필터링
+  const validRoles = welcomeMsg.role_ids.filter((roleId) => {
+    return interaction.guild!.roles.cache.has(roleId);
+  });
+
+  if (validRoles.length === 0) {
     await interaction.reply({
-      content: `${role.name} 역할이 부여되었습니다. 서버에 오신 것을 환영합니다!`,
+      content: "부여할 역할을 찾을 수 없습니다.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  try {
+    // 여러 역할 한 번에 부여
+    await member.roles.add(validRoles);
+
+    const roleNames = validRoles
+      .map((roleId) => interaction.guild!.roles.cache.get(roleId)?.name)
+      .filter(Boolean)
+      .join(", ");
+
+    await interaction.reply({
+      content: `${roleNames} 역할이 부여되었습니다. 서버에 오신 것을 환영합니다!`,
       ephemeral: true,
     });
   } catch (error) {
-    context.logger.error({ err: error }, "Failed to assign welcome role");
+    context.logger.error({ err: error }, "Failed to assign welcome roles");
     await interaction.reply({
       content: "역할을 부여하지 못했습니다.",
       ephemeral: true,
@@ -335,7 +473,8 @@ const welcomeModule: BotModule = {
   commands,
   register: (context) => {
     context.client.on("interactionCreate", async (interaction) => {
-      if (interaction.isModalSubmit() && interaction.customId.startsWith("welcome_setup:")) {
+      if (interaction.isModalSubmit() &&
+          (interaction.customId.startsWith("welcome_setup:") || interaction.customId.startsWith("welcome_edit:"))) {
         await handleModalSubmit(interaction, context);
       }
       if (interaction.isButton() && interaction.customId.startsWith(BUTTON_PREFIX)) {

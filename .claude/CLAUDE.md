@@ -69,10 +69,13 @@
 
 ### 9. 웰컴 메시지 (`src/modules/welcome/`)
 - `/config set welcome_channel` - 웰컴 채널 설정
-- `/welcome setup <역할>` - Modal로 웰컴 메시지 설정 (타이틀, 내용, 버튼 이모지, 버튼 레이블)
+- `/welcome setup <역할1~5>` - Modal로 웰컴 메시지 설정 (타이틀, 내용, 버튼 이모지, 버튼 레이블)
+  - 최대 5개 역할 선택 가능 (role1 필수, role2-5 선택)
+  - 버튼 1개 클릭으로 지정된 모든 역할 동시 부여
+- `/welcome edit` - 기존 웰컴 메시지 수정 (Modal에 현재 값 자동 입력)
 - `/welcome remove` - 웰컴 메시지 삭제
-- 버튼 클릭 시 지정된 역할 자동 부여
-- 중복 클릭 방지 (이미 역할 보유 시 "이미 인증되었습니다" 메시지)
+- 버튼 클릭 시 지정된 모든 역할 자동 부여
+- 중복 클릭 방지 (모든 역할 보유 시 "이미 인증되었습니다" 메시지)
 - 길드당 1개의 웰컴 메시지만 지원
 - 버튼 customId 규칙: `welcome:<guildId>`
 - 관리자 전용, admin_config_channel에서만 사용 가능
@@ -117,7 +120,7 @@ src/
 - `role_panel_items`: 패널 내 역할 항목
 - `audit_events`: 감사 로그 이벤트
 - `custom_commands`: 커스텀 명령어 정보 (이름, 설명, 응답)
-- `welcome_message`: 웰컴 메시지 정보 (타이틀, 내용, 버튼, 역할)
+- `welcome_message`: 웰컴 메시지 정보 (타이틀, 내용, 버튼, 다중 역할)
 
 ## 개발 명령어
 

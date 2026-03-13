@@ -109,7 +109,7 @@ model welcome_message {
   content       String   @db.Text
   button_emoji  String?
   button_label  String
-  role_id       String
+  role_ids      String[]
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 

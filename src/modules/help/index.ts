@@ -32,12 +32,11 @@ const commands = [
         // 임베드 생성
         const embed = new EmbedBuilder()
           .setTitle("📚 명령어 목록")
-          .setDescription("EE-ONE-D 봇에서 사용 가능한 명령어입니다.")
+          .setDescription("EE-ONE-D 봇에서 사용 가능한 명령어입니다.\n\n[GitHub 이슈 제보 및 문의](https://github.com/HelloJamong/EE-ONE-D/issues)")
           .addFields(
             { name: "📌 기본 명령어", value: staticCommandList || "없음" },
             { name: "⚙️ 커스텀 명령어", value: customCommandList }
           )
-          .setFooter({ text: "이슈 제보 및 문의 : https://github.com/HelloJamong/EE-ONE-D" })
           .setColor(0x5865f2)
           .setTimestamp();
 

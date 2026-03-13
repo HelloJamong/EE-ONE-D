@@ -12,7 +12,7 @@ export async function reloadCustomCommands(context: AppContext) {
     staticCommands.map((cmd) => cmd.data),
     customCmds.map((c) => ({
       name: c.name,
-      description: c.description || c.response.slice(0, 100),
+      description: c.description || "커스텀 명령어",
     })),
     rest,
     config,

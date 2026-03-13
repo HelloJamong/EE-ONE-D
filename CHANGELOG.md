@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.5] - 2026-03-13
+
+### Changed
+- 웰컴 메시지 다중 역할 할당
+  - `/welcome setup` - 최대 5개 역할 선택 가능
+  - 버튼 1개 클릭으로 지정된 모든 역할 동시 부여
+  - 이미 모든 역할을 보유한 경우 "이미 인증되었습니다" 표시
+
+### Added
+- `/welcome edit` 명령어
+  - 기존 웰컴 메시지 수정
+  - Modal에 현재 설정값 자동 입력
+  - 역할 ID 쉼표로 구분하여 수정 가능
+
+### Fixed
+- `/help` 명령어 GitHub 링크 클릭 불가 문제 수정
+  - Footer URL을 클릭 가능한 마크다운 링크로 변경
+  - Description에 GitHub 이슈 링크 추가
+- 커스텀 명령어 미리보기에 응답 내용 노출 문제 수정
+  - description이 없을 때 response 내용 대신 "커스텀 명령어" 표시
+  - Discord slash command 목록에서 깔끔한 표시
+
+### Technical
+- DB 스키마 업데이트
+  - `welcome_message.role_id` → `role_ids` (String 배열)
+  - **주의**: 기존 웰컴 메시지가 있는 경우, 배포 전에 데이터 백업 권장
+
 ## [1.0.4] - 2026-03-13
 
 ### Added
