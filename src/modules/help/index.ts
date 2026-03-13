@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, PermissionFlagsBits } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
 
 const commands = [
@@ -8,11 +8,8 @@ const commands = [
       .setDescription("사용 가능한 명령어 목록을 확인합니다."),
     handle: async (interaction: ChatInputCommandInteraction, context: AppContext) => {
       try {
-        // 정적 명령어 목록
-        const staticCommands = context.staticCommands || [];
-        const staticCommandList = staticCommands
-          .map((cmd) => `\`/${cmd.data.name}\` - ${cmd.data.description}`)
-          .join("\n");
+        // 관리자 여부 확인
+        const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) || false;
 
         // 커스텀 명령어 목록
         const customCommands = await context.db.custom_commands.findMany({
@@ -33,12 +30,26 @@ const commands = [
         const embed = new EmbedBuilder()
           .setTitle("📚 명령어 목록")
           .setDescription("EE-ONE-D 봇에서 사용 가능한 명령어입니다.\n\n[GitHub 이슈 제보 및 문의](https://github.com/HelloJamong/EE-ONE-D/issues)")
-          .addFields(
-            { name: "📌 기본 명령어", value: staticCommandList || "없음" },
-            { name: "⚙️ 커스텀 명령어", value: customCommandList }
-          )
           .setColor(0x5865f2)
           .setTimestamp();
+
+        // 관리자인 경우에만 기본 명령어 표시
+        if (isAdmin) {
+          const staticCommands = context.staticCommands || [];
+          const staticCommandList = staticCommands
+            .map((cmd) => `\`/${cmd.data.name}\` - ${cmd.data.description}`)
+            .join("\n");
+
+          embed.addFields(
+            { name: "📌 기본 명령어 (관리자 전용)", value: staticCommandList || "없음" },
+            { name: "⚙️ 커스텀 명령어", value: customCommandList }
+          );
+        } else {
+          // 일반 유저는 커스텀 명령어만 표시
+          embed.addFields(
+            { name: "⚙️ 사용 가능한 명령어", value: customCommandList }
+          );
+        }
 
         // DM 전송 시도
         try {

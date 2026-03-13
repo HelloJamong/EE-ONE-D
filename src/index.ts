@@ -14,6 +14,7 @@ import roleStatsModule from "./modules/roleStats/index.js";
 import notificationsModule from "./modules/notifications/index.js";
 import welcomeModule from "./modules/welcome/index.js";
 import helpModule from "./modules/help/index.js";
+import versionModule from "./modules/version/index.js";
 
 const config = loadConfig();
 const logger = createLogger(config);
@@ -42,6 +43,7 @@ const modules: BotModule[] = [
   notificationsModule,
   welcomeModule,
   helpModule,
+  versionModule,
 ];
 
 const commands: SlashCommand[] = modules.flatMap((mod) => mod.commands ?? []);
@@ -53,13 +55,13 @@ async function bootstrap() {
 
   // 커스텀 명령어 로드
   const customCmds = await db.custom_commands.findMany({
-    select: { name: true, response: true },
+    select: { name: true, description: true, response: true },
   });
 
   // 고정 + 동적 명령어 모두 등록
   await registerAllCommands(
     commands.map((cmd) => cmd.data),
-    customCmds.map((c) => ({ name: c.name, description: c.response.slice(0, 100) })),
+    customCmds.map((c) => ({ name: c.name, description: c.description || "커스텀 명령어" })),
     rest,
     config,
     logger

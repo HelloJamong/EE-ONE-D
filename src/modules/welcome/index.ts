@@ -97,18 +97,6 @@ const commands = [
         return;
       }
 
-      const settings = await context.db.guild_settings.findUnique({
-        where: { guild_id: interaction.guildId! },
-      });
-
-      if (settings?.admin_config_channel_id && interaction.channelId !== settings.admin_config_channel_id) {
-        await interaction.reply({
-          content: "이 명령어는 지정된 관리자 채널에서만 사용할 수 있습니다.",
-          ephemeral: true,
-        });
-        return;
-      }
-
       const sub = interaction.options.getSubcommand();
 
       if (sub === "setup") {
@@ -169,12 +157,15 @@ const commands = [
       }
 
       if (sub === "edit") {
+        // 먼저 응답 예약 (DB 조회 전)
+        await interaction.deferReply({ ephemeral: true });
+
         const existing = await context.db.welcome_message.findUnique({
           where: { guild_id: interaction.guildId! },
         });
 
         if (!existing) {
-          await interaction.reply({ content: "설정된 웰컴 메시지가 없습니다.", ephemeral: true });
+          await interaction.editReply({ content: "설정된 웰컴 메시지가 없습니다." });
           return;
         }
 
@@ -232,17 +223,21 @@ const commands = [
           new ActionRowBuilder<TextInputBuilder>().addComponents(rolesInput)
         );
 
+        // deferReply 후에는 showModal 불가능하므로 deleteReply 후 showModal
+        await interaction.deleteReply();
         await interaction.showModal(modal);
         return;
       }
 
       if (sub === "remove") {
+        await interaction.deferReply({ ephemeral: true });
+
         const existing = await context.db.welcome_message.findUnique({
           where: { guild_id: interaction.guildId! },
         });
 
         if (!existing) {
-          await interaction.reply({ content: "설정된 웰컴 메시지가 없습니다.", ephemeral: true });
+          await interaction.editReply({ content: "설정된 웰컴 메시지가 없습니다." });
           return;
         }
 
@@ -263,7 +258,7 @@ const commands = [
           where: { guild_id: interaction.guildId! },
         });
 
-        await interaction.reply({ content: "웰컴 메시지를 삭제했습니다.", ephemeral: true });
+        await interaction.editReply({ content: "웰컴 메시지를 삭제했습니다." });
         return;
       }
     },
@@ -305,6 +300,14 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction, context: A
     const settings = await context.db.guild_settings.findUnique({
       where: { guild_id: interaction.guildId! },
     });
+
+    // admin_config_channel 검증 (Modal submit 시점)
+    if (settings?.admin_config_channel_id && interaction.channelId !== settings.admin_config_channel_id) {
+      await interaction.editReply({
+        content: "이 명령어는 지정된 관리자 채널에서만 사용할 수 있습니다.",
+      });
+      return;
+    }
 
     if (!settings?.welcome_channel_id) {
       await interaction.editReply({
