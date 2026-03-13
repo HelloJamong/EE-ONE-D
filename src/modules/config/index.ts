@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChannelType, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
+import { SlashCommandBuilder, ChannelType, ChatInputCommandInteraction, EmbedBuilder, ActivityType } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
 
 function ensureAdministrator(interaction: ChatInputCommandInteraction) {
@@ -77,7 +77,30 @@ const commands = [
               .setRequired(false)
           )
       )
-      .addSubcommand((sub) => sub.setName("show").setDescription("현재 설정을 확인합니다.")),
+      .addSubcommand((sub) => sub.setName("show").setDescription("현재 설정을 확인합니다."))
+      .addSubcommand((sub) =>
+        sub
+          .setName("bot_status")
+          .setDescription("봇 상태 메시지를 설정합니다.")
+          .addStringOption((opt) =>
+            opt
+              .setName("type")
+              .setDescription("상태 타입")
+              .setRequired(true)
+              .addChoices(
+                { name: "플레이중", value: "PLAYING" },
+                { name: "시청중", value: "WATCHING" },
+                { name: "듣는중", value: "LISTENING" }
+              )
+          )
+          .addStringOption((opt) =>
+            opt
+              .setName("text")
+              .setDescription("표시할 메시지")
+              .setRequired(true)
+              .setMaxLength(128)
+          )
+      ),
     handle: async (interaction: ChatInputCommandInteraction, context: AppContext) => {
       try {
         ensureAdministrator(interaction);
@@ -95,6 +118,9 @@ const commands = [
 
       if (sub === "show") {
         const auditStatus = settings?.log_channel_id ? "활성화 (자동)" : "비활성화";
+        const activityStatusText = settings?.activity_type && settings?.activity_text
+          ? `${settings.activity_type} - ${settings.activity_text}`
+          : "-";
         await interaction.reply({
           content: [
             `role_panel_channel_id: ${settings?.role_panel_channel_id ?? "-"}`,
@@ -103,8 +129,54 @@ const commands = [
             `notification_channel_id: ${settings?.notification_channel_id ?? "-"}`,
             `welcome_channel_id: ${settings?.welcome_channel_id ?? "-"}`,
             `감사 로그: ${auditStatus}`,
+            `봇 상태: ${activityStatusText}`,
             `updated_at: ${settings?.updated_at?.toISOString() ?? "-"}`,
           ].join("\n"),
+          ephemeral: true,
+        });
+        return;
+      }
+
+      if (sub === "bot_status") {
+        const activityType = interaction.options.getString("type", true) as "PLAYING" | "WATCHING" | "LISTENING";
+        const activityText = interaction.options.getString("text", true);
+
+        // DB에 저장
+        await context.db.guild_settings.upsert({
+          where: { guild_id: guildId },
+          create: {
+            guild_id: guildId,
+            activity_type: activityType,
+            activity_text: activityText,
+          },
+          update: {
+            activity_type: activityType,
+            activity_text: activityText,
+          },
+        });
+
+        // 봇 상태 업데이트
+        const discordActivityType = {
+          PLAYING: ActivityType.Playing,
+          WATCHING: ActivityType.Watching,
+          LISTENING: ActivityType.Listening,
+        }[activityType];
+
+        context.client.user?.setActivity(activityText, { type: discordActivityType });
+
+        await logConfigUpdate(context, guildId, interaction.user.id, {
+          activity_type: activityType,
+          activity_text: activityText,
+        });
+
+        const typeLabel = {
+          PLAYING: "플레이중",
+          WATCHING: "시청중",
+          LISTENING: "듣는중",
+        }[activityType];
+
+        await interaction.reply({
+          content: `봇 상태를 설정했습니다.\n타입: ${typeLabel}\n메시지: ${activityText}`,
           ephemeral: true,
         });
         return;

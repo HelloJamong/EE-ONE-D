@@ -23,14 +23,24 @@ function ensureAdministrator(interaction: ChatInputCommandInteraction) {
   }
 }
 
-function parseEmoji(input: string): { id?: string; name?: string } {
+function parseEmoji(input: string): { id?: string; name?: string } | null {
+  if (!input || input.trim() === '') return null;
+
   // 커스텀 이모지: <:name:id> 또는 <a:name:id>
   const customMatch = input.match(/<?a?:(\w+):(\d+)>?/);
   if (customMatch) {
     return { id: customMatch[2], name: customMatch[1] };
   }
-  // 유니코드 이모지
-  return { name: input };
+
+  // 유니코드 이모지 검증 (간단한 체크)
+  // 이모지는 일반적으로 특수 유니코드 문자이므로, 일반 텍스트와 구분
+  const emojiRegex = /^[\p{Emoji}\p{Emoji_Component}]+$/u;
+  if (emojiRegex.test(input.trim())) {
+    return { name: input.trim() };
+  }
+
+  // 유효하지 않은 입력
+  return null;
 }
 
 const commands = [
@@ -200,10 +210,12 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction, context: A
 
   if (buttonEmojiInput) {
     const emoji = parseEmoji(buttonEmojiInput);
-    if (emoji.id) {
-      button.setEmoji({ id: emoji.id, name: emoji.name });
-    } else if (emoji.name) {
-      button.setEmoji(emoji.name);
+    if (emoji) {
+      if (emoji.id) {
+        button.setEmoji({ id: emoji.id, name: emoji.name });
+      } else if (emoji.name) {
+        button.setEmoji(emoji.name);
+      }
     }
   }
 

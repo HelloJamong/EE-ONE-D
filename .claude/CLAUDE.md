@@ -21,10 +21,14 @@
 - 버튼 기반 역할 토글
 - `/panel create/add/remove/list/publish/set_message` 명령어
 - 버튼 customId 규칙: `rp:<panelId>:<itemId>`
+- 커스텀 이모지 자동 변환: Description에서 `:emoji_name:` → `<:emoji_name:emoji_id>`
 
 ### 2. 관리자 설정 (`src/modules/config/`)
 - `/config set/show` 명령어
-- admin 채널, panel 채널, log 채널, notification 채널 설정
+- admin 채널, panel 채널, log 채널, notification 채널, welcome 채널 설정
+- `/config bot_status <타입> <텍스트>` - 봇 상태 메시지 설정
+  - 타입: 플레이중(PLAYING), 시청중(WATCHING), 듣는중(LISTENING)
+  - DB에 저장되어 재시작 시에도 유지
 - `Administrator` 권한 필요
 
 ### 3. 감사 로그 (`src/modules/audit/`)
@@ -39,6 +43,9 @@
 
 ### 5. 디시인사이드 미리보기 (`src/modules/dcEmbed/`)
 - DC 링크 단독 메시지 -> 임베드 미리보기
+- 데스크톱/모바일 URL 모두 지원
+  - 데스크톱: `https://gall.dcinside.com/board/view/?id=...&no=...`
+  - 모바일: `https://m.dcinside.com/board/{갤러리ID}/{게시글번호}`
 - TTL 캐싱 적용
 
 ### 6. 커스텀 명령어 (`src/modules/customCommands/`)
@@ -70,6 +77,12 @@
 - 버튼 customId 규칙: `welcome:<guildId>`
 - 관리자 전용, admin_config_channel에서만 사용 가능
 
+### 10. 도움말 (`src/modules/help/`)
+- `/help` - 사용 가능한 모든 명령어 목록 조회
+- 기본 명령어 + 커스텀 명령어 모두 포함
+- DM으로 전송
+- 봇 소개 및 GitHub 이슈 링크 포함
+
 ## 프로젝트 구조
 
 ```
@@ -82,6 +95,7 @@ src/
 │   ├── customCommands/   # 커스텀 명령어
 │   ├── dcEmbed/          # 디시인사이드 미리보기
 │   ├── emojiExpand/      # 이모지 확대
+│   ├── help/             # 도움말
 │   ├── notifications/    # 공지사항 관리
 │   ├── rolePanels/       # 역할 패널
 │   ├── roleStats/        # 역할 통계
@@ -96,11 +110,13 @@ src/
 
 ## 데이터베이스 스키마
 
-- `guild_settings`: 길드별 채널 설정 (role_panel, admin_config, log, notification, welcome)
+- `guild_settings`: 길드별 설정
+  - 채널: role_panel, admin_config, log, notification, welcome
+  - 봇 상태: activity_type (PLAYING/WATCHING/LISTENING), activity_text
 - `role_panels`: 역할 패널 정보 (MULTI/SINGLE 모드)
 - `role_panel_items`: 패널 내 역할 항목
 - `audit_events`: 감사 로그 이벤트
-- `custom_commands`: 커스텀 명령어 정보 (이름, 응답)
+- `custom_commands`: 커스텀 명령어 정보 (이름, 설명, 응답)
 - `welcome_message`: 웰컴 메시지 정보 (타이틀, 내용, 버튼, 역할)
 
 ## 개발 명령어

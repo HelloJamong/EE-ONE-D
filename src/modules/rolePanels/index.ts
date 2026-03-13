@@ -36,10 +36,32 @@ async function ensureAdminChannel(interaction: ChatInputCommandInteraction, admi
   }
 }
 
-function buildPanelEmbed(panel: any) {
+function buildPanelEmbed(panel: any, guild?: any) {
+  let description = panel.description;
+
+  // 길드 정보가 있으면 커스텀 이모지 자동 변환
+  if (guild?.emojis?.cache) {
+    // 이모지 이름 -> 정보 매핑 생성
+    const emojiMap = new Map<string, { id: string; animated: boolean }>();
+    guild.emojis.cache.forEach((emoji: any) => {
+      if (emoji.name) {
+        emojiMap.set(emoji.name, { id: emoji.id, animated: emoji.animated || false });
+      }
+    });
+
+    // :emoji_name: 패턴을 <:emoji_name:emoji_id> 또는 <a:emoji_name:emoji_id>로 변환
+    description = description.replace(/:(\w+):/g, (match: string, emojiName: string) => {
+      const emoji = emojiMap.get(emojiName);
+      if (emoji) {
+        return emoji.animated ? `<a:${emojiName}:${emoji.id}>` : `<:${emojiName}:${emoji.id}>`;
+      }
+      return match; // 서버에 없는 이모지는 그대로 유지
+    });
+  }
+
   return new EmbedBuilder()
     .setTitle(panel.title)
-    .setDescription(panel.description)
+    .setDescription(description)
     .setColor(0x5865f2);
 }
 
@@ -141,7 +163,7 @@ async function publishPanel(
     return;
   }
 
-  const embed = buildPanelEmbed(panel);
+  const embed = buildPanelEmbed(panel, interaction.guild);
   const components = buildButtons(panel.items);
 
   try {
@@ -352,7 +374,7 @@ const commands = [
 
         // 즉시 빈 패널 게시
         try {
-          const embed = buildPanelEmbed(created);
+          const embed = buildPanelEmbed(created, interaction.guild);
           const sent = await channel.send({ embeds: [embed] });
 
           await prisma.role_panels.update({

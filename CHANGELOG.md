@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.0.4] - 2026-03-13
+
+### Added
+- 봇 상태 메시지 설정 기능
+  - `/config bot_status <타입> <텍스트>` - 봇 상태 변경
+  - 타입 선택: 플레이중, 시청중, 듣는중
+  - DB에 저장되어 재시작 시에도 유지
+  - 실시간으로 봇 프로필에 반영
+
+- `/help` 명령어
+  - 사용 가능한 모든 명령어 목록 조회
+  - 기본 명령어 + 커스텀 명령어 포함
+  - DM으로 전송
+  - 봇 소개 및 이슈 제보 링크 포함
+
+- 디시인사이드 모바일 URL 지원
+  - `https://m.dcinside.com/board/{갤러리ID}/{게시글번호}` 형식 지원
+  - 자동으로 데스크톱 URL로 변환하여 미리보기 생성
+
+- 역할 패널 커스텀 이모지 자동 변환
+  - Description에서 `:emoji_name:` 형식 자동 인식
+  - 서버 커스텀 이모지로 자동 변환 (`<:emoji_name:emoji_id>`)
+  - 애니메이션 이모지 지원 (`<a:emoji_name:emoji_id>`)
+  - 수동으로 이모지 ID 입력할 필요 없음
+
+### Fixed
+- 웰컴 메시지 이모지 검증 로직 개선
+  - 일반 텍스트 입력 시 Discord API 오류 발생 문제 수정
+  - 유니코드 이모지 정규식 검증 추가
+  - 유효하지 않은 입력은 무시하고 이모지 없이 버튼 생성
+
+### Technical
+- DB 스키마 업데이트
+  - `guild_settings` 테이블에 `activity_type`, `activity_text` 필드 추가
+  - `ActivityType` enum 추가 (PLAYING, WATCHING, LISTENING)
+
+- 새로운 모듈 추가
+  - `src/modules/help/` - 명령어 도움말
+
+- 디시인사이드 미리보기 개선
+  - 정규식 분리 (데스크톱/모바일)
+  - URL 정규화 로직 강화
+
 ## [1.0.3] - 2026-03-13
 
 ### Added

@@ -4,10 +4,21 @@ import { TTLCache } from "../../shared/cache.js";
 import { BotModule, AppContext } from "../../types.js";
 
 const cache = new TTLCache<{ title: string; gallery: string; summary?: string }>(60_000);
-const DC_REGEX = /^https?:\/\/(m\.)?gall\.dcinside\.com\/(mgallery\/|mini\/)?board\/view\/?\?[^ \n]+$/i;
+// 데스크톱: https://gall.dcinside.com/board/view/?id=dcbest&no=412451
+// 모바일: https://m.dcinside.com/board/dcbest/412451
+const DC_REGEX_DESKTOP = /^https?:\/\/(m\.)?gall\.dcinside\.com\/(mgallery\/|mini\/)?board\/view\/?\?[^ \n]+$/i;
+const DC_REGEX_MOBILE = /^https?:\/\/m\.dcinside\.com\/board\/([^\/\s]+)\/(\d+)$/i;
 
 function normalizeUrl(raw: string) {
   try {
+    // 모바일 URL -> 데스크톱 URL 변환
+    const mobileMatch = raw.match(DC_REGEX_MOBILE);
+    if (mobileMatch) {
+      const [, galleryId, postNo] = mobileMatch;
+      return `https://gall.dcinside.com/board/view/?id=${galleryId}&no=${postNo}`;
+    }
+
+    // 데스크톱 URL 정규화
     const url = new URL(raw);
     url.hostname = "gall.dcinside.com";
     return url.toString();
@@ -70,7 +81,7 @@ const dcEmbedModule: BotModule = {
     client.on("messageCreate", async (message) => {
       if (!message.guild || message.author.bot) return;
       const content = message.content.trim();
-      if (!DC_REGEX.test(content)) return;
+      if (!DC_REGEX_DESKTOP.test(content) && !DC_REGEX_MOBILE.test(content)) return;
       // 링크만 단독으로 있을 때만 동작
       if (content.split(/\s+/).length !== 1) return;
 

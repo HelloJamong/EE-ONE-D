@@ -13,6 +13,7 @@ import customCommandsModule from "./modules/customCommands/index.js";
 import roleStatsModule from "./modules/roleStats/index.js";
 import notificationsModule from "./modules/notifications/index.js";
 import welcomeModule from "./modules/welcome/index.js";
+import helpModule from "./modules/help/index.js";
 
 const config = loadConfig();
 const logger = createLogger(config);
@@ -40,6 +41,7 @@ const modules: BotModule[] = [
   roleStatsModule,
   notificationsModule,
   welcomeModule,
+  helpModule,
 ];
 
 const commands: SlashCommand[] = modules.flatMap((mod) => mod.commands ?? []);
@@ -71,12 +73,40 @@ async function bootstrap() {
     }
   });
 
-  client.once("ready", () => {
+  client.once("ready", async () => {
     logger.info({ tag: client.user?.tag }, "Bot is ready");
-    client.user?.setPresence({
-      activities: [{ name: "BIG BROTHER IS WATCHING YOU", type: ActivityType.Watching }],
-      status: "online",
+
+    // DB에서 봇 상태 설정 불러오기 (첫 번째 길드 설정 사용)
+    const firstGuildSettings = await db.guild_settings.findFirst({
+      where: {
+        activity_type: { not: null },
+        activity_text: { not: null },
+      },
+      select: { activity_type: true, activity_text: true },
     });
+
+    if (firstGuildSettings?.activity_type && firstGuildSettings?.activity_text) {
+      const activityTypeMap: Record<string, ActivityType> = {
+        PLAYING: ActivityType.Playing,
+        WATCHING: ActivityType.Watching,
+        LISTENING: ActivityType.Listening,
+      };
+
+      client.user?.setPresence({
+        activities: [{
+          name: firstGuildSettings.activity_text,
+          type: activityTypeMap[firstGuildSettings.activity_type] || ActivityType.Watching,
+        }],
+        status: "online",
+      });
+      logger.info({ activity: firstGuildSettings }, "Bot activity set from database");
+    } else {
+      // 기본 상태
+      client.user?.setPresence({
+        activities: [{ name: "BIG BROTHER IS WATCHING YOU", type: ActivityType.Watching }],
+        status: "online",
+      });
+    }
   });
 
   await client.login(config.DISCORD_TOKEN);
