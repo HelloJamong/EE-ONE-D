@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.9] - 2026-03-13
+
+### Fixed
+- 디시인사이드 모바일 URL 쿼리 파라미터 지원
+  - `?recommend=1`, `?page=1` 등 쿼리 파라미터 포함된 URL 정상 처리
+  - 예: `https://m.dcinside.com/board/eft/2730298?recommend=1`
+  - 모바일 URL 정규식 개선
+
 ## [1.0.8] - 2026-03-13
 
 ### Fixed

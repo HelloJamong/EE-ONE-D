@@ -5,9 +5,9 @@ import { BotModule, AppContext } from "../../types.js";
 
 const cache = new TTLCache<{ title: string; gallery: string; summary?: string }>(60_000);
 // 데스크톱: https://gall.dcinside.com/board/view/?id=dcbest&no=412451
-// 모바일: https://m.dcinside.com/board/dcbest/412451
+// 모바일: https://m.dcinside.com/board/dcbest/412451 또는 https://m.dcinside.com/board/eft/2730298?recommend=1
 const DC_REGEX_DESKTOP = /^https?:\/\/(m\.)?gall\.dcinside\.com\/(mgallery\/|mini\/)?board\/view\/?\?[^ \n]+$/i;
-const DC_REGEX_MOBILE = /^https?:\/\/m\.dcinside\.com\/board\/([^\/\s]+)\/(\d+)$/i;
+const DC_REGEX_MOBILE = /^https?:\/\/m\.dcinside\.com\/board\/([^\/\s]+)\/(\d+)(\?.*)?$/i;
 
 function normalizeUrl(raw: string) {
   try {
@@ -81,9 +81,21 @@ const dcEmbedModule: BotModule = {
     client.on("messageCreate", async (message) => {
       if (!message.guild || message.author.bot) return;
       const content = message.content.trim();
-      if (!DC_REGEX_DESKTOP.test(content) && !DC_REGEX_MOBILE.test(content)) return;
+
+      // 디버그 로그
+      const isDesktopMatch = DC_REGEX_DESKTOP.test(content);
+      const isMobileMatch = DC_REGEX_MOBILE.test(content);
+
+      if (!isDesktopMatch && !isMobileMatch) return;
+
       // 링크만 단독으로 있을 때만 동작
-      if (content.split(/\s+/).length !== 1) return;
+      const wordCount = content.split(/\s+/).length;
+      if (wordCount !== 1) {
+        logger.debug({ content, wordCount }, "DC link ignored: not standalone");
+        return;
+      }
+
+      logger.debug({ content, isDesktopMatch, isMobileMatch }, "Processing DC link");
 
       const url = normalizeUrl(content);
       try {
