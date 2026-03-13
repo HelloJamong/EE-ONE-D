@@ -69,6 +69,13 @@ const commands = [
               .addChannelTypes(ChannelType.GuildText)
               .setRequired(false)
           )
+          .addChannelOption((opt) =>
+            opt
+              .setName("welcome_channel")
+              .setDescription("웰컴 메시지 채널")
+              .addChannelTypes(ChannelType.GuildText)
+              .setRequired(false)
+          )
       )
       .addSubcommand((sub) => sub.setName("show").setDescription("현재 설정을 확인합니다.")),
     handle: async (interaction: ChatInputCommandInteraction, context: AppContext) => {
@@ -94,6 +101,7 @@ const commands = [
             `admin_config_channel_id: ${settings?.admin_config_channel_id ?? "-"}`,
             `log_channel_id: ${settings?.log_channel_id ?? "-"}`,
             `notification_channel_id: ${settings?.notification_channel_id ?? "-"}`,
+            `welcome_channel_id: ${settings?.welcome_channel_id ?? "-"}`,
             `감사 로그: ${auditStatus}`,
             `updated_at: ${settings?.updated_at?.toISOString() ?? "-"}`,
           ].join("\n"),
@@ -114,6 +122,7 @@ const commands = [
       const adminChannel = interaction.options.getChannel("admin_channel", false);
       const logChannel = interaction.options.getChannel("log_channel", false);
       const notificationChannel = interaction.options.getChannel("notification_channel", false);
+      const welcomeChannel = interaction.options.getChannel("welcome_channel", false);
 
       const updated = await context.db.guild_settings.upsert({
         where: { guild_id: guildId },
@@ -123,12 +132,14 @@ const commands = [
           admin_config_channel_id: adminChannel?.id,
           log_channel_id: logChannel?.id,
           notification_channel_id: notificationChannel?.id,
+          welcome_channel_id: welcomeChannel?.id,
         },
         update: {
           role_panel_channel_id: roleChannel?.id ?? settings?.role_panel_channel_id,
           admin_config_channel_id: adminChannel?.id ?? settings?.admin_config_channel_id,
           log_channel_id: logChannel?.id ?? settings?.log_channel_id,
           notification_channel_id: notificationChannel?.id ?? settings?.notification_channel_id,
+          welcome_channel_id: welcomeChannel?.id ?? settings?.welcome_channel_id,
         },
       });
 
@@ -137,6 +148,7 @@ const commands = [
         admin_config_channel_id: updated.admin_config_channel_id,
         log_channel_id: updated.log_channel_id,
         notification_channel_id: updated.notification_channel_id,
+        welcome_channel_id: updated.welcome_channel_id,
       });
 
       const auditStatusMessage = updated.log_channel_id
@@ -150,6 +162,7 @@ const commands = [
           `admin_config_channel_id: ${updated.admin_config_channel_id ?? "-"}`,
           `log_channel_id: ${updated.log_channel_id ?? "-"}`,
           `notification_channel_id: ${updated.notification_channel_id ?? "-"}`,
+          `welcome_channel_id: ${updated.welcome_channel_id ?? "-"}`,
         ].join("\n") + auditStatusMessage,
         ephemeral: true,
       });

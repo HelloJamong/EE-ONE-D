@@ -57,6 +57,16 @@
 - 관리자 전용, admin_config_channel에서만 사용 가능
 - 감사 로그 자동 기록
 
+### 9. 웰컴 메시지 (`src/modules/welcome/`)
+- `/config set welcome_channel` - 웰컴 채널 설정
+- `/welcome setup <역할>` - Modal로 웰컴 메시지 설정 (타이틀, 내용, 버튼 이모지, 버튼 레이블)
+- `/welcome remove` - 웰컴 메시지 삭제
+- 버튼 클릭 시 지정된 역할 자동 부여
+- 중복 클릭 방지 (이미 역할 보유 시 "이미 인증되었습니다" 메시지)
+- 길드당 1개의 웰컴 메시지만 지원
+- 버튼 customId 규칙: `welcome:<guildId>`
+- 관리자 전용, admin_config_channel에서만 사용 가능
+
 ## 프로젝트 구조
 
 ```
@@ -71,7 +81,8 @@ src/
 │   ├── emojiExpand/      # 이모지 확대
 │   ├── notifications/    # 공지사항 관리
 │   ├── rolePanels/       # 역할 패널
-│   └── roleStats/        # 역할 통계
+│   ├── roleStats/        # 역할 통계
+│   └── welcome/          # 웰컴 메시지
 └── shared/               # 공유 유틸리티
     ├── cache.ts          # 캐시 유틸
     ├── db.ts             # Prisma 클라이언트
@@ -82,11 +93,12 @@ src/
 
 ## 데이터베이스 스키마
 
-- `guild_settings`: 길드별 채널 설정 (role_panel, admin_config, log, notification)
+- `guild_settings`: 길드별 채널 설정 (role_panel, admin_config, log, notification, welcome)
 - `role_panels`: 역할 패널 정보 (MULTI/SINGLE 모드)
 - `role_panel_items`: 패널 내 역할 항목
 - `audit_events`: 감사 로그 이벤트
 - `custom_commands`: 커스텀 명령어 정보 (이름, 응답)
+- `welcome_message`: 웰컴 메시지 정보 (타이틀, 내용, 버튼, 역할)
 
 ## 개발 명령어
 

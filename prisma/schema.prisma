@@ -20,12 +20,14 @@ model guild_settings {
   admin_config_channel_id String?
   log_channel_id          String?
   notification_channel_id String?
+  welcome_channel_id      String?
   audit_enabled           Boolean  @default(false)
   updated_at              DateTime @updatedAt
 
   role_panels role_panels[]
   audit_events audit_events[]
   custom_commands custom_commands[]
+  welcome_message welcome_message?
 }
 
 model role_panels {
@@ -88,4 +90,20 @@ model custom_commands {
 
   @@unique([guild_id, name])
   @@index([guild_id])
+}
+
+model welcome_message {
+  id            String   @id @default(cuid())
+  guild_id      String   @unique
+  channel_id    String
+  message_id    String?
+  title         String
+  content       String   @db.Text
+  button_emoji  String?
+  button_label  String
+  role_id       String
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  guild guild_settings @relation(fields: [guild_id], references: [guild_id], onDelete: Cascade)
 }

@@ -12,6 +12,7 @@ import auditModule from "./modules/audit/index.js";
 import customCommandsModule from "./modules/customCommands/index.js";
 import roleStatsModule from "./modules/roleStats/index.js";
 import notificationsModule from "./modules/notifications/index.js";
+import welcomeModule from "./modules/welcome/index.js";
 
 const config = loadConfig();
 const logger = createLogger(config);
@@ -38,6 +39,7 @@ const modules: BotModule[] = [
   customCommandsModule,
   roleStatsModule,
   notificationsModule,
+  welcomeModule,
 ];
 
 const commands: SlashCommand[] = modules.flatMap((mod) => mod.commands ?? []);
