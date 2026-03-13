@@ -17,7 +17,11 @@ services:
 
   bot:
     image: igor0670/ee-one-d:latest
-    build: .
+    build:
+      context: .
+      platforms:
+        - linux/amd64
+    platform: linux/amd64
     container_name: eeoned-bot
     env_file:
       - .env
