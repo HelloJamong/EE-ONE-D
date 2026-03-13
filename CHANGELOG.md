@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.6] - 2026-03-13
+
+### Fixed
+- `/welcome setup` 실행 시 "실행 중 오류가 발생했습니다" 문제 수정
+  - Modal submit interaction timeout 문제 해결
+  - 즉시 응답 예약(deferReply) 후 작업 처리
+  - 5개 역할 선택 시에도 정상 동작
+- `/help` 명령어 GitHub 링크 클릭 불가 문제 수정
+  - Footer URL을 클릭 가능한 마크다운 링크로 변경
+  - Description에 GitHub 이슈 링크 추가
+- 커스텀 명령어 미리보기에 응답 내용 노출 문제 수정
+  - description이 없을 때 response 내용 대신 "커스텀 명령어" 표시
+  - Discord slash command 목록에서 깔끔한 표시
+  - **참고**: 기존 커맨드 반영은 `/cmd reload` 실행 필요
+
 ## [1.0.5] - 2026-03-13
 
 ### Changed
@@ -13,14 +28,6 @@
   - 기존 웰컴 메시지 수정
   - Modal에 현재 설정값 자동 입력
   - 역할 ID 쉼표로 구분하여 수정 가능
-
-### Fixed
-- `/help` 명령어 GitHub 링크 클릭 불가 문제 수정
-  - Footer URL을 클릭 가능한 마크다운 링크로 변경
-  - Description에 GitHub 이슈 링크 추가
-- 커스텀 명령어 미리보기에 응답 내용 노출 문제 수정
-  - description이 없을 때 response 내용 대신 "커스텀 명령어" 표시
-  - Discord slash command 목록에서 깔끔한 표시
 
 ### Technical
 - DB 스키마 업데이트

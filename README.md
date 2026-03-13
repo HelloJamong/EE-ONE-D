@@ -34,14 +34,14 @@ GitHub 릴리즈에서 최신 버전의 배포 파일을 다운로드합니다:
 curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/latest/download/docker-compose.yml
 
 # .env.example 다운로드
-curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/latest/download/.env.example
+curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/latest/download/default.env.example
 ```
 
 **특정 버전 다운로드:**
 ```bash
 VERSION=v1.0.0
 curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/download/${VERSION}/docker-compose.yml
-curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/download/${VERSION}/.env.example
+curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/download/${VERSION}/default.env.example
 ```
 
 ### 3. 환경 변수 설정
