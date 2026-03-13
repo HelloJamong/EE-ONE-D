@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.11] - 2026-03-13
+
+### Fixed
+- 디시인사이드 모바일 URL 파싱 개선
+  - 모바일 URL을 데스크톱 URL로 변환하지 않고 직접 파싱
+  - 마이너 갤러리/미니 갤러리 모바일 URL 정상 처리
+  - 갤러리 타입 자동 인식
+  - 모든 갤러리 타입에서 미리보기 정상 작동
+
 ## [1.0.10] - 2026-03-13
 
 ### Fixed
@@ -7,7 +16,7 @@
   - Discord API의 빈 description 거부 문제 해결
   - summary가 있을 때만 description 설정
   - 게시글 미리보기 정상 작동
-- `/version` 명령어 개선
+/- `/version` 명령어 개선
   - GitHub Releases 페이지로 이동하는 클릭 가능한 링크 추가
   - Description에 마크다운 링크 형식으로 제공
 

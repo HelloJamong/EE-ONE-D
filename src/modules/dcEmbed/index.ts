@@ -11,11 +11,10 @@ const DC_REGEX_MOBILE = /^https?:\/\/m\.dcinside\.com\/board\/([^\/\s]+)\/(\d+)(
 
 function normalizeUrl(raw: string) {
   try {
-    // 모바일 URL -> 데스크톱 URL 변환
     const mobileMatch = raw.match(DC_REGEX_MOBILE);
     if (mobileMatch) {
-      const [, galleryId, postNo] = mobileMatch;
-      return `https://gall.dcinside.com/board/view/?id=${galleryId}&no=${postNo}`;
+      // 모바일 URL은 그대로 사용 (갤러리 타입 구분 불가하므로 직접 파싱)
+      return raw;
     }
 
     // 데스크톱 URL 정규화
