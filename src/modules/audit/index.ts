@@ -10,12 +10,14 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   PermissionFlagsBits,
+  AttachmentBuilder,
 } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
 
 const COLORS: Record<string, number> = {
   VOICE_JOIN: 0x57f287,
   VOICE_LEAVE: 0xed4245,
+  VOICE_MOVE: 0xfee75c,
   MESSAGE_DELETE: 0xed4245,
   MESSAGE_EDIT: 0xfee75c,
   MEMBER_JOIN: 0x57f287,
@@ -38,6 +40,15 @@ async function isAuditEnabled(context: AppContext, guildId: string): Promise<boo
 interface SendLogOptions {
   fields?: { name: string; value: string; inline?: boolean }[];
   imageUrl?: string;
+  files?: AttachmentBuilder[];
+  footer?: string;
+  author?: {
+    name: string;
+    iconURL?: string;
+    url?: string;
+  };
+  title?: string;
+  url?: string;
 }
 
 async function sendLog(
@@ -68,20 +79,45 @@ async function sendLog(
   if (!channel || channel.type !== ChannelType.GuildText) return;
 
   const embed = new EmbedBuilder()
-    .setTitle(eventType)
     .setDescription(messageBuilder())
     .setColor(COLORS[eventType] ?? 0x2f3136)
     .setTimestamp(new Date());
+
+  if (options.title) {
+    embed.setTitle(options.title);
+  }
+
+  if (options.url) {
+    embed.setURL(options.url);
+  }
+
+  if (options.author) {
+    embed.setAuthor(options.author);
+  }
 
   if (options.fields?.length) {
     embed.addFields(options.fields);
   }
 
-  if (options.imageUrl) {
+  if (options.footer) {
+    embed.setFooter({ text: options.footer });
+  }
+
+  if (options.imageUrl && !options.files?.length) {
+    // files가 없을 때만 imageUrl 사용 (fallback)
     embed.setImage(options.imageUrl);
   }
 
-  await channel.send({ embeds: [embed] });
+  const messageOptions: any = { embeds: [embed] };
+  if (options.files?.length) {
+    messageOptions.files = options.files;
+    // 첫 번째 파일을 임베드 이미지로 설정
+    if (options.files[0]) {
+      embed.setImage(`attachment://${options.files[0].name}`);
+    }
+  }
+
+  await channel.send(messageOptions);
 }
 
 function displayUser(user: any) {
@@ -102,7 +138,18 @@ const auditModule: BotModule = {
       const guildId = newState.guild.id;
       if (oldState.channelId === newState.channelId) return;
       try {
+        const member = newState.member ?? oldState.member;
+        if (!member) return;
+
+        const author = {
+          name: member.user.tag,
+          iconURL: member.user.displayAvatarURL(),
+        };
+
+        const footer = `ID: ${member.id}`;
+
         if (!oldState.channelId && newState.channelId) {
+          // 음성 채널 참가
           await sendLog(
             context,
             guildId,
@@ -112,10 +159,11 @@ const auditModule: BotModule = {
               channel_id: newState.channelId,
               target_id: newState.channelId,
             },
-            () => `${newState.member?.displayName ?? "사용자"}가 음성 채널에 참가했습니다.`,
-            { fields: [{ name: "Channel", value: `<#${newState.channelId}>` }] }
+            () => `joined voice channel <#${newState.channelId}>`,
+            { author, footer }
           );
         } else if (oldState.channelId && !newState.channelId) {
+          // 음성 채널 퇴장
           await sendLog(
             context,
             guildId,
@@ -125,8 +173,23 @@ const auditModule: BotModule = {
               channel_id: oldState.channelId,
               target_id: oldState.channelId,
             },
-            () => `${oldState.member?.displayName ?? "사용자"}가 음성 채널을 떠났습니다.`,
-            { fields: [{ name: "Channel", value: `<#${oldState.channelId}>` }] }
+            () => `left voice channel <#${oldState.channelId}>`,
+            { author, footer }
+          );
+        } else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+          // 음성 채널 이동
+          await sendLog(
+            context,
+            guildId,
+            "VOICE_MOVE",
+            {
+              actor_id: newState.id,
+              channel_id: newState.channelId,
+              target_id: newState.channelId,
+              from_channel_id: oldState.channelId,
+            },
+            () => `moved from <#${oldState.channelId}> to <#${newState.channelId}>`,
+            { author, footer }
           );
         }
       } catch (error) {
@@ -143,25 +206,56 @@ const auditModule: BotModule = {
           contentType: a.contentType,
         })) ?? [];
 
-        const imageAttachment = message.attachments?.find((a) =>
+        const imageAttachments = message.attachments?.filter((a) =>
           a.contentType?.startsWith("image/")
         );
 
-        const fields = [
-          { name: "User", value: message.author ? displayUser(message.author) : "Unknown" },
-          { name: "Channel", value: `<#${message.channelId}>` },
-        ];
+        const author = message.author
+          ? {
+              name: message.author.tag,
+              iconURL: message.author.displayAvatarURL(),
+            }
+          : undefined;
 
+        const footer = message.author
+          ? `User ID: ${message.author.id} | Message ID: ${message.id}`
+          : `Message ID: ${message.id}`;
+
+        // 설명 생성
+        let description = `Message deleted in <#${message.channelId}>`;
         if (message.content) {
-          fields.push({ name: "Content", value: message.content.slice(0, 1024) });
+          description += `\n\n${message.content.slice(0, 1024)}`;
         }
 
-        if (attachments.length > 0) {
+        const fields: { name: string; value: string }[] = [];
+
+        // 이미지가 아닌 첨부파일 표시
+        if (attachments.length > 0 && !imageAttachments?.size) {
           const attachmentList = attachments
+            .filter((a) => !a.contentType?.startsWith("image/"))
             .map((a) => `[${a.name}](${a.url})`)
             .join("\n")
             .slice(0, 1024);
-          fields.push({ name: "Attachments", value: attachmentList });
+          if (attachmentList) {
+            fields.push({ name: "Attachments", value: attachmentList });
+          }
+        }
+
+        // 이미지 다운로드 및 재업로드
+        const files: AttachmentBuilder[] = [];
+        if (imageAttachments && imageAttachments.size > 0) {
+          for (const [, attachment] of imageAttachments) {
+            try {
+              const response = await fetch(attachment.url);
+              if (response.ok) {
+                const buffer = Buffer.from(await response.arrayBuffer());
+                const file = new AttachmentBuilder(buffer, { name: attachment.name ?? "image.png" });
+                files.push(file);
+              }
+            } catch (err) {
+              logger.warn({ err, url: attachment.url }, "Failed to download image attachment");
+            }
+          }
         }
 
         await sendLog(
@@ -175,10 +269,12 @@ const auditModule: BotModule = {
             content: message.content ?? "N/A",
             attachments,
           },
-          () => `메시지가 삭제되었습니다.`,
+          () => description,
           {
-            fields,
-            imageUrl: imageAttachment?.url,
+            author,
+            fields: fields.length > 0 ? fields : undefined,
+            files: files.length > 0 ? files : undefined,
+            footer,
           }
         );
       } catch (error) {
@@ -190,6 +286,17 @@ const auditModule: BotModule = {
       if (!newMessage.guild || newMessage.author?.bot) return;
       if (oldMessage.content === newMessage.content) return;
       try {
+        const author = newMessage.author
+          ? {
+              name: newMessage.author.tag,
+              iconURL: newMessage.author.displayAvatarURL(),
+            }
+          : undefined;
+
+        const footer = newMessage.author ? `User ID: ${newMessage.author.id}` : undefined;
+
+        const messageUrl = `https://discord.com/channels/${newMessage.guild.id}/${newMessage.channelId}/${newMessage.id}`;
+
         await sendLog(
           context,
           newMessage.guild.id,
@@ -201,11 +308,13 @@ const auditModule: BotModule = {
             before: oldMessage.content ?? "N/A",
             after: newMessage.content ?? "N/A",
           },
-          () => `메시지가 수정되었습니다.`,
+          () => `Message edited in <#${newMessage.channelId}>`,
           {
+            author,
+            footer,
+            title: "Jump to Message",
+            url: messageUrl,
             fields: [
-              { name: "User", value: newMessage.author ? displayUser(newMessage.author) : "Unknown" },
-              { name: "Channel", value: `<#${newMessage.channelId}>` },
               { name: "Before", value: (oldMessage.content ?? "N/A").slice(0, 1024) },
               { name: "After", value: (newMessage.content ?? "N/A").slice(0, 1024) },
             ],
@@ -218,12 +327,20 @@ const auditModule: BotModule = {
 
     client.on("guildMemberAdd", async (member: GuildMember) => {
       try {
+        const author = {
+          name: member.user.tag,
+          iconURL: member.user.displayAvatarURL(),
+        };
+
+        const footer = `ID: ${member.id}`;
+
         await sendLog(
           context,
           member.guild.id,
           "MEMBER_JOIN",
           { actor_id: member.id, channel_id: null, target_id: member.id },
-          () => `${member.displayName} 입장`
+          () => `joined the server`,
+          { author, footer }
         );
       } catch (error) {
         logger.warn({ err: error }, "Member join audit failed");
@@ -232,12 +349,20 @@ const auditModule: BotModule = {
 
     client.on("guildMemberRemove", async (member: GuildMember | PartialGuildMember) => {
       try {
+        const author = {
+          name: member.user.tag,
+          iconURL: member.user.displayAvatarURL(),
+        };
+
+        const footer = `ID: ${member.id}`;
+
         await sendLog(
           context,
           member.guild.id,
           "MEMBER_LEAVE",
           { actor_id: member.id, channel_id: null, target_id: member.id },
-          () => `${member.displayName ?? "사용자"} 퇴장`
+          () => `left the server`,
+          { author, footer }
         );
       } catch (error) {
         logger.warn({ err: error }, "Member leave audit failed");
@@ -246,8 +371,16 @@ const auditModule: BotModule = {
 
     client.on("guildMemberUpdate", async (oldMember: GuildMember | PartialGuildMember, newMember: GuildMember) => {
       try {
+        const author = {
+          name: newMember.user.tag,
+          iconURL: newMember.user.displayAvatarURL(),
+        };
+
+        const footer = `ID: ${newMember.id}`;
+
         const oldRoles = new Set(oldMember.roles.cache.keys());
         const newRoles = new Set(newMember.roles.cache.keys());
+
         for (const roleId of newRoles) {
           if (!oldRoles.has(roleId)) {
             await sendLog(
@@ -259,11 +392,12 @@ const auditModule: BotModule = {
                 channel_id: null,
                 target_id: roleId,
               },
-              () => `${newMember.displayName}에게 역할이 부여됨`,
-              { fields: [{ name: "Role", value: `<@&${roleId}>` }] }
+              () => `was granted role <@&${roleId}>`,
+              { author, footer }
             );
           }
         }
+
         for (const roleId of oldRoles) {
           if (!newRoles.has(roleId)) {
             await sendLog(
@@ -275,8 +409,8 @@ const auditModule: BotModule = {
                 channel_id: null,
                 target_id: roleId,
               },
-              () => `${newMember.displayName}의 역할이 제거됨`,
-              { fields: [{ name: "Role", value: `<@&${roleId}>` }] }
+              () => `was revoked role <@&${roleId}>`,
+              { author, footer }
             );
           }
         }

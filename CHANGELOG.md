@@ -1,5 +1,83 @@
 # Changelog
 
+## [1.0.3] - 2026-03-13
+
+### Added
+- 웰컴 메시지 시스템 (`/welcome`)
+  - `/config set welcome_channel` - 웰컴 채널 설정
+  - `/welcome setup <역할>` - Modal로 웰컴 메시지 설정
+    - 타이틀, 내용, 버튼 이모지(선택), 버튼 레이블 입력 지원
+  - `/welcome remove` - 웰컴 메시지 삭제
+  - 버튼 클릭 시 지정된 역할 자동 부여
+  - 중복 클릭 방지 (이미 역할 보유 시 안내)
+  - 길드당 1개의 웰컴 메시지 지원
+  - 신규 멤버 규칙 동의 및 인증 시스템 구현
+
+- 감사 로그 이미지 영구 보관
+  - 메시지 삭제 시 이미지 자동 다운로드 및 재업로드
+  - Discord CDN URL 만료 문제 해결
+  - 삭제된 이미지를 로그 채널에 영구 보관
+  - 여러 이미지 첨부 지원
+
+- 음성 채널 이동 로그 (VOICE_MOVE)
+  - 음성 채널 간 이동 시 별도 로그 기록
+  - 이전 채널과 이후 채널 정보 표시
+  - 기존 입장/퇴장 로그와 구분
+
+### Changed
+- 감사 로그 형식 대폭 개선 (DynoBot 스타일)
+  - 임베드 Author에 유저 프로필 사진과 이름 표시
+  - 간결한 설명으로 변경 (액션 중심)
+  - Footer에 고유 ID 정보 표시
+    - 음성/멤버 로그: `ID: <유저ID>`
+    - 메시지 로그: `User ID: <유저ID> | Message ID: <메시지ID>`
+  - 불필요한 필드 제거, 핵심 정보만 표시
+
+- 메시지 수정 로그 개선
+  - "Jump to Message" 링크 추가 (클릭 시 해당 메시지로 이동)
+  - Before/After 필드로 변경 내용 명확히 표시
+  - Author 정보로 누가 수정했는지 한눈에 파악
+
+- 메시지 삭제 로그 개선
+  - 메시지 내용을 Description에 직접 표시
+  - Author 정보로 누가 삭제했는지 명확히 표시
+  - 이미지는 임베드에 직접 첨부
+
+- 음성 채널 로그 간소화
+  - "joined voice channel #채널" 형식으로 변경
+  - "left voice channel #채널" 형식으로 변경
+  - "moved from #채널1 to #채널2" 형식으로 변경
+
+- 멤버 입퇴장 로그 간소화
+  - "joined the server" 형식으로 변경
+  - "left the server" 형식으로 변경
+
+- 역할 변경 로그 간소화
+  - "was granted role @역할" 형식으로 변경
+  - "was revoked role @역할" 형식으로 변경
+
+### Technical
+- DB 스키마 업데이트
+  - `guild_settings` 테이블에 `welcome_channel_id` 필드 추가
+  - `welcome_message` 테이블 신규 생성
+    - id, guild_id (unique), channel_id, message_id, title, content, button_emoji, button_label, role_id
+  - 1:1 관계로 길드당 1개의 웰컴 메시지 보장
+
+- 새로운 모듈 추가
+  - `src/modules/welcome/` - 웰컴 메시지 관리
+  - Modal 기반 설정 인터페이스
+  - 버튼 인터랙션 처리
+
+- 감사 로그 리팩토링
+  - `SendLogOptions` 인터페이스 확장 (author, title, url, footer 옵션 추가)
+  - 모든 이벤트 핸들러에 일관된 형식 적용
+  - 이미지 다운로드 로직 추가 (fetch API + AttachmentBuilder)
+
+- CLAUDE.md 문서 업데이트
+  - 웰컴 메시지 기능 설명 추가
+  - 감사 로그 개선 사항 반영
+  - 배포 및 운영 섹션 추가 (Docker 구성, 마이그레이션 가이드)
+
 ## [1.0.2] - 2026-03-12
 
 ### Added
