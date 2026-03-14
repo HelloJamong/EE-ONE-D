@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.5] - 2026-03-14
+
+### Removed
+- 음악 재생 기능 일시 제거
+  - `/play`, `/queue`, `/skip`, `/stop`, `/nowplaying` 명령어 제거
+  - 음성 채널 연결 안정성 문제로 인한 일시적 제거
+  - 향후 재구현 예정 (백업: `backup/music-debug-2026-03-14` 브랜치)
+
+### Technical
+- Alpine Linux 기반 Docker 이미지로 복원
+- 음악 관련 패키지 제거 (play-dl, @discordjs/opus, sodium-native 등)
+- 디버깅 로그 제거
+
 ## [1.0.11] - 2026-03-13
 
 ### Fixed
