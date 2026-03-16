@@ -103,6 +103,7 @@ docker compose ps
 /config set role_panel_channel:#역할선택채널
 /config set log_channel:#로그채널
 /config set notification_channel:#공지사항채널
+/config set welcome_channel:#웰컴채널
 ```
 
 2. 설정 확인:
