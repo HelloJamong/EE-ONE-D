@@ -7,6 +7,7 @@ import {
   ChannelType,
   TextChannel,
 } from "discord.js";
+import { buildPollEmbed, buildPollComponents, closePoll } from "./poll.js";
 import { AppContext } from "../../types.js";
 
 async function parseMentions(content: string, guildId: string, context: AppContext): Promise<string> {
@@ -158,6 +159,124 @@ export async function handleSendModal(
     await interaction.editReply({
       content: "공지사항 발송 중 오류가 발생했습니다.",
     });
+  }
+}
+
+export function createPollModal(duration: number, allowMultiple: boolean) {
+  return new ModalBuilder()
+    .setCustomId(`noti_poll_modal:${duration}:${allowMultiple}`)
+    .setTitle("투표 만들기")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("title")
+          .setLabel("투표 제목")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(256)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("options")
+          .setLabel("투표 항목 (줄바꿈으로 구분, 최대 10개)")
+          .setStyle(TextInputStyle.Paragraph)
+          .setPlaceholder("항목1\n항목2\n항목3")
+          .setMaxLength(1000)
+          .setRequired(true)
+      )
+    );
+}
+
+export async function handlePollModal(
+  interaction: ModalSubmitInteraction,
+  context: AppContext
+) {
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    const [, durationStr, allowMultipleStr] = interaction.customId.split(":");
+    const duration = parseInt(durationStr, 10);
+    const allowMultiple = allowMultipleStr === "true";
+    const guildId = interaction.guildId!;
+
+    const title = interaction.fields.getTextInputValue("title");
+    const optionsRaw = interaction.fields.getTextInputValue("options");
+    const options = optionsRaw
+      .split("\n")
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0)
+      .slice(0, 10);
+
+    if (options.length < 2) {
+      await interaction.editReply({ content: "투표 항목은 최소 2개 이상이어야 합니다." });
+      return;
+    }
+
+    const settings = await context.db.guild_settings.findUnique({
+      where: { guild_id: guildId },
+    });
+
+    if (!settings?.notification_channel_id) {
+      await interaction.editReply({
+        content: "공지사항 채널이 설정되지 않았습니다. `/config set notification_channel`을 먼저 실행해주세요.",
+      });
+      return;
+    }
+
+    const channel = await context.client.channels.fetch(settings.notification_channel_id);
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      await interaction.editReply({ content: "공지사항 채널을 찾을 수 없습니다." });
+      return;
+    }
+
+    const endsAt = new Date(Date.now() + duration * 60 * 60 * 1000);
+    const voteCounts = options.map(() => 0);
+
+    // 임시 poll ID 없이 먼저 메시지 전송 후 DB 저장
+    const embed = buildPollEmbed(title, options, voteCounts, allowMultiple, endsAt, false);
+
+    // DB에 poll 생성 (message_id는 나중에 업데이트)
+    const poll = await context.db.poll_messages.create({
+      data: {
+        guild_id: guildId,
+        channel_id: settings.notification_channel_id,
+        message_id: "pending",
+        title,
+        options,
+        allow_multiple: allowMultiple,
+        ends_at: endsAt,
+        created_by: interaction.user.id,
+      },
+    });
+
+    const components = buildPollComponents(poll.id, options, false);
+    const message = await (channel as TextChannel).send({ embeds: [embed], components });
+
+    await context.db.poll_messages.update({
+      where: { id: poll.id },
+      data: { message_id: message.id },
+    });
+
+    // 마감 타이머 등록
+    setTimeout(() => closePoll(poll.id, context), duration * 60 * 60 * 1000);
+
+    await context.db.audit_events.create({
+      data: {
+        guild_id: guildId,
+        event_type: "POLL_CREATED",
+        actor_id: interaction.user.id,
+        channel_id: interaction.channelId,
+        target_id: message.id,
+        details: { title, options, duration, allow_multiple: allowMultiple },
+      },
+    });
+
+    await interaction.editReply({
+      content: `투표가 <#${settings.notification_channel_id}>에 생성되었습니다. (${duration}시간 후 마감)`,
+    });
+  } catch (error) {
+    context.logger.error({ err: error }, "Failed to create poll");
+    await interaction.editReply({ content: "투표 생성 중 오류가 발생했습니다." });
   }
 }
 

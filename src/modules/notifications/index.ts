@@ -1,7 +1,8 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
 import { handleSend, handleEdit, handleRemove } from "./handlers.js";
-import { handleSendModal, handleEditModal } from "./modals.js";
+import { handleSendModal, handleEditModal, createPollModal, handlePollModal } from "./modals.js";
+import { handlePollButton, scheduleActivePollTimers } from "./poll.js";
 
 function ensureAdministrator(interaction: ChatInputCommandInteraction) {
   if (!interaction.memberPermissions?.has("Administrator")) {
@@ -38,6 +39,25 @@ const commands = [
               .setDescription("삭제할 메시지 ID")
               .setRequired(true)
           )
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("poll")
+          .setDescription("투표를 생성합니다.")
+          .addIntegerOption((opt) =>
+            opt
+              .setName("duration")
+              .setDescription("투표 마감 시간 (시간 단위, 기본 1시간, 최대 24시간)")
+              .setMinValue(1)
+              .setMaxValue(24)
+              .setRequired(false)
+          )
+          .addBooleanOption((opt) =>
+            opt
+              .setName("allow_multiple")
+              .setDescription("중복 투표 허용 여부 (기본: 불가)")
+              .setRequired(false)
+          )
       ),
     handle: async (interaction: ChatInputCommandInteraction, context: AppContext) => {
       try {
@@ -71,6 +91,13 @@ const commands = [
         case "remove":
           await handleRemove(interaction, context);
           break;
+        case "poll": {
+          const duration = interaction.options.getInteger("duration") ?? 1;
+          const allowMultiple = interaction.options.getBoolean("allow_multiple") ?? false;
+          const modal = createPollModal(duration, allowMultiple);
+          await interaction.showModal(modal);
+          break;
+        }
       }
     },
   },
@@ -80,13 +107,19 @@ const notificationsModule: BotModule = {
   name: "notifications",
   commands,
   register: (context) => {
+    scheduleActivePollTimers(context);
+
     context.client.on("interactionCreate", async (interaction) => {
       if (interaction.isModalSubmit()) {
         if (interaction.customId === "noti_send_modal") {
           await handleSendModal(interaction, context);
         } else if (interaction.customId.startsWith("noti_edit_modal:")) {
           await handleEditModal(interaction, context);
+        } else if (interaction.customId.startsWith("noti_poll_modal:")) {
+          await handlePollModal(interaction, context);
         }
+      } else if (interaction.isButton() && interaction.customId.startsWith("poll:")) {
+        await handlePollButton(interaction, context);
       }
     });
   },
