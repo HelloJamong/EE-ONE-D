@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1] - 2026-03-31
+
+### Fixed
+- GitHub Actions 워크플로우 GHA 캐시 제거
+  - `src/` 변경 사항이 Docker 이미지에 반영되지 않던 문제 수정
+  - `no-cache: true` 적용으로 매 릴리즈마다 새로 빌드
+
 ## [1.2.0] - 2026-03-31
 
 ### Added
