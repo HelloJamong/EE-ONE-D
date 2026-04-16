@@ -61,12 +61,29 @@ export async function registerAllCommands(
   config: AppConfig,
   logger: Logger
 ) {
-  const customSlashCommands = customCommands.map((cmd) =>
-    new SlashCommandBuilder()
-      .setName(cmd.name)
-      .setDescription(cmd.description || "커스텀 명령어")
-      .toJSON()
-  );
+  const staticCommandNames = new Set(staticCommands.map((cmd) => cmd.name));
+  const seenCustomCommandNames = new Set<string>();
+  const customSlashCommands = customCommands
+    .filter((cmd) => {
+      if (staticCommandNames.has(cmd.name)) {
+        logger.warn({ command: cmd.name }, "Skipping custom command that conflicts with a built-in command");
+        return false;
+      }
+
+      if (seenCustomCommandNames.has(cmd.name)) {
+        logger.warn({ command: cmd.name }, "Skipping duplicate custom command registration");
+        return false;
+      }
+
+      seenCustomCommandNames.add(cmd.name);
+      return true;
+    })
+    .map((cmd) =>
+      new SlashCommandBuilder()
+        .setName(cmd.name)
+        .setDescription(cmd.description || "커스텀 명령어")
+        .toJSON()
+    );
 
   const body = [
     ...staticCommands.map((cmd) => cmd.toJSON()),

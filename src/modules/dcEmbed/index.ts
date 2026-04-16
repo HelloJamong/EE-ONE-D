@@ -1,4 +1,4 @@
-import { EmbedBuilder, Message } from "discord.js";
+import { AttachmentBuilder, EmbedBuilder, Message } from "discord.js";
 import { load, type CheerioAPI } from "cheerio";
 import { TTLCache } from "../../shared/cache.js";
 import { BotModule, AppContext } from "../../types.js";
@@ -8,6 +8,7 @@ type DcPreview = {
   gallery: string;
   summary?: string;
   imageUrl?: string;
+  imageUrls: string[];
 };
 
 const cache = new TTLCache<DcPreview>(60_000);
@@ -16,6 +17,9 @@ const cache = new TTLCache<DcPreview>(60_000);
 const DC_REGEX_DESKTOP = /^https?:\/\/(m\.)?gall\.dcinside\.com\/(mgallery\/|mini\/)?board\/view\/?\?[^ \n]+$/i;
 const DC_REGEX_MOBILE = /^https?:\/\/m\.dcinside\.com\/(board|mgallery|mini)\/([^\/\s]+)\/(\d+)(\?.*)?$/i;
 const CONTENT_IMAGE_SELECTOR = ".write_div img, .writing_view_box img, .gallview_contents img";
+const MAX_EMBED_IMAGE_BYTES = 8 * 1024 * 1024;
+const DC_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 const IGNORED_IMAGE_PATTERNS = [
   /\/loading_/i,
   /\/gallview_loading_/i,
@@ -23,6 +27,7 @@ const IGNORED_IMAGE_PATTERNS = [
   /\/dcin_logo\./i,
   /\/tit_ngallery\./i,
   /\/kcap_/i,
+  /\/fix_nik\.gif/i,
 ];
 
 function normalizeUrl(raw: string) {
@@ -42,6 +47,14 @@ function normalizeUrl(raw: string) {
   }
 }
 
+function isLikelyPostImageHost(hostname: string) {
+  return (
+    /^dcimg\d*\.dcinside\.co\.kr$/i.test(hostname) ||
+    /^dcimg\d*\.dcinside\.com$/i.test(hostname) ||
+    hostname === "image.dcinside.com"
+  );
+}
+
 function normalizeImageUrl(raw: string | undefined, baseUrl: string) {
   const candidate = raw?.trim();
   if (!candidate) return undefined;
@@ -49,6 +62,7 @@ function normalizeImageUrl(raw: string | undefined, baseUrl: string) {
   try {
     const url = new URL(candidate, baseUrl);
     if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    if (!isLikelyPostImageHost(url.hostname)) return undefined;
 
     const imageUrl = url.toString();
     if (IGNORED_IMAGE_PATTERNS.some((pattern) => pattern.test(imageUrl))) return undefined;
@@ -58,10 +72,16 @@ function normalizeImageUrl(raw: string | undefined, baseUrl: string) {
   }
 }
 
-function extractFirstImageUrl($: CheerioAPI, baseUrl: string) {
+function uniqueDefined(values: Array<string | undefined>) {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+function extractImageUrls($: CheerioAPI, baseUrl: string) {
   // 갤러리 대문/기본 썸네일이 섞일 수 있는 og:image 대신,
-  // 실제 게시글 본문 영역에 포함된 첫 번째 이미지만 사용한다.
-  return $(CONTENT_IMAGE_SELECTOR)
+  // 실제 게시글 본문 영역에 포함된 이미지와 원본 첨부파일 링크만 후보로 사용한다.
+  // dcimg*.dcinside.co.kr/viewimage.php는 Referer 없이 403을 반환하는 케이스가 있어
+  // 이후 다운로드 단계에서 게시글 URL을 Referer로 넣어 재첨부한다.
+  const contentImages = $(CONTENT_IMAGE_SELECTOR)
     .toArray()
     .map((element) =>
       normalizeImageUrl(
@@ -70,15 +90,20 @@ function extractFirstImageUrl($: CheerioAPI, baseUrl: string) {
           $(element).attr("src"),
         baseUrl
       )
-    )
-    .find((imageUrl): imageUrl is string => Boolean(imageUrl));
+    );
+
+  const attachmentImages = $("a[href*='image.dcinside.com/download.php']")
+    .toArray()
+    .map((element) => normalizeImageUrl($(element).attr("href"), baseUrl));
+
+  return uniqueDefined([...contentImages, ...attachmentImages]);
 }
 
 async function fetchPreview(url: string, logger: AppContext["logger"]) {
   const cached = cache.get(url);
   if (cached) return cached;
 
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
+  const res = await fetch(url, { headers: { "User-Agent": DC_USER_AGENT } });
   if (!res.ok) throw new Error(`Failed to fetch page: ${res.status}`);
   const html = await res.text();
   const $ = load(html);
@@ -100,15 +125,91 @@ async function fetchPreview(url: string, logger: AppContext["logger"]) {
     $("meta[property='og:description']").attr("content") ||
     $("meta[name='description']").attr("content") ||
     undefined;
-  const imageUrl = extractFirstImageUrl($, url);
+  const imageUrls = extractImageUrls($, url);
+  const imageUrl = imageUrls[0];
 
-  const preview = { title: title || "디시인사이드 게시글", gallery, summary, imageUrl };
+  const preview = { title: title || "디시인사이드 게시글", gallery, summary, imageUrl, imageUrls };
   cache.set(url, preview);
   logger.debug({ url, preview }, "Cached dcinside preview");
   return preview;
 }
 
-function buildEmbed(message: Message, url: string, preview: DcPreview) {
+function inferImageExtension(contentType: string | null, buffer: Buffer) {
+  const normalizedType = contentType?.split(";")[0].trim().toLowerCase();
+  if (normalizedType === "image/png") return "png";
+  if (normalizedType === "image/jpeg" || normalizedType === "image/jpg") return "jpg";
+  if (normalizedType === "image/gif") return "gif";
+  if (normalizedType === "image/webp") return "webp";
+
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return "png";
+  }
+  if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+    return "jpg";
+  }
+  if (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a") {
+    return "gif";
+  }
+  if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") {
+    return "webp";
+  }
+
+  return undefined;
+}
+
+async function createEmbedImageAttachment(
+  imageUrls: string[],
+  referer: string,
+  logger: AppContext["logger"]
+) {
+  for (const imageUrl of imageUrls) {
+    try {
+      const res = await fetch(imageUrl, {
+        headers: {
+          "User-Agent": DC_USER_AGENT,
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+          Referer: referer,
+        },
+      });
+
+      if (!res.ok) {
+        logger.warn({ imageUrl, status: res.status }, "Failed to download dcinside preview image");
+        continue;
+      }
+
+      const contentLength = Number(res.headers.get("content-length") ?? "0");
+      if (contentLength > MAX_EMBED_IMAGE_BYTES) {
+        logger.warn({ imageUrl, contentLength }, "Skipping oversized dcinside preview image");
+        continue;
+      }
+
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.length === 0 || buffer.length > MAX_EMBED_IMAGE_BYTES) {
+        logger.warn({ imageUrl, size: buffer.length }, "Skipping invalid-sized dcinside preview image");
+        continue;
+      }
+
+      const extension = inferImageExtension(res.headers.get("content-type"), buffer);
+      if (!extension) {
+        logger.warn({ imageUrl, contentType: res.headers.get("content-type") }, "Skipping non-image dcinside preview attachment");
+        continue;
+      }
+
+      const name = `dc-preview.${extension}`;
+      return {
+        name,
+        sourceUrl: imageUrl,
+        attachment: new AttachmentBuilder(buffer, { name }),
+      };
+    } catch (error) {
+      logger.warn({ err: error, imageUrl }, "Failed to prepare dcinside preview image attachment");
+    }
+  }
+
+  return undefined;
+}
+
+function buildEmbed(message: Message, url: string, preview: DcPreview, attachmentName?: string) {
   const embed = new EmbedBuilder()
     .setAuthor({
       name: message.member?.displayName ?? message.author.username,
@@ -126,7 +227,7 @@ function buildEmbed(message: Message, url: string, preview: DcPreview) {
   }
 
   if (preview.imageUrl) {
-    embed.setImage(preview.imageUrl);
+    embed.setImage(attachmentName ? `attachment://${attachmentName}` : preview.imageUrl);
   }
 
   return embed;
@@ -158,15 +259,28 @@ const dcEmbedModule: BotModule = {
       const url = normalizeUrl(content);
       try {
         const preview = await fetchPreview(url, logger);
-        const embed = buildEmbed(message, url, preview);
+        const imageAttachment = preview.imageUrls.length > 0
+          ? await createEmbedImageAttachment(preview.imageUrls, url, logger)
+          : undefined;
+        const embed = buildEmbed(message, url, preview, imageAttachment?.name);
+
+        try {
+          await message.channel.send({
+            embeds: [embed],
+            files: imageAttachment ? [imageAttachment.attachment] : undefined,
+          });
+        } catch (sendError) {
+          if (!imageAttachment) throw sendError;
+
+          logger.warn({ err: sendError }, "Failed to send attached dcinside preview image; retrying with remote image URL");
+          await message.channel.send({ embeds: [buildEmbed(message, url, preview)] });
+        }
 
         try {
           await message.delete();
         } catch (deleteError) {
           logger.warn({ err: deleteError, channelId: message.channelId, authorId: message.author.id }, "Failed to delete original DC message");
         }
-
-        await message.channel.send({ embeds: [embed] });
       } catch (error) {
         // 미리보기 실패 시 원본 메시지 유지, 아무 동작 하지 않음
         logger.warn({ err: error }, "Failed to fetch dcinside preview");

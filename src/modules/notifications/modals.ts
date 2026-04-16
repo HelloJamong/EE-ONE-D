@@ -7,6 +7,7 @@ import {
   ChannelType,
   TextChannel,
 } from "discord.js";
+import { randomUUID } from "node:crypto";
 import { buildPollEmbed, buildPollComponents, closePoll } from "./poll.js";
 import { AppContext } from "../../types.js";
 
@@ -231,16 +232,18 @@ export async function handlePollModal(
 
     const endsAt = new Date(Date.now() + duration * 60 * 60 * 1000);
     const voteCounts = options.map(() => 0);
+    const pollId = randomUUID();
 
-    // 임시 poll ID 없이 먼저 메시지 전송 후 DB 저장
     const embed = buildPollEmbed(title, options, voteCounts, allowMultiple, endsAt, false);
 
-    // DB에 poll 생성 (message_id는 나중에 업데이트)
+    // 버튼 customId에 들어갈 pollId를 먼저 확보하되, 실패한 과거 생성 건의
+    // "pending" placeholder와 충돌하지 않도록 poll별 고유 placeholder를 사용한다.
     const poll = await context.db.poll_messages.create({
       data: {
+        id: pollId,
         guild_id: guildId,
         channel_id: settings.notification_channel_id,
-        message_id: "pending",
+        message_id: `pending:${pollId}`,
         title,
         options,
         allow_multiple: allowMultiple,
@@ -250,12 +253,27 @@ export async function handlePollModal(
     });
 
     const components = buildPollComponents(poll.id, options, false);
-    const message = await (channel as TextChannel).send({ embeds: [embed], components });
+    let message: Awaited<ReturnType<TextChannel["send"]>> | undefined;
+    try {
+      message = await (channel as TextChannel).send({ embeds: [embed], components });
 
-    await context.db.poll_messages.update({
-      where: { id: poll.id },
-      data: { message_id: message.id },
-    });
+      await context.db.poll_messages.update({
+        where: { id: poll.id },
+        data: { message_id: message.id },
+      });
+    } catch (error) {
+      if (message) {
+        await message.delete().catch((deleteError) => {
+          context.logger.warn({ err: deleteError, pollId: poll.id }, "Failed to delete orphaned poll message");
+        });
+      }
+
+      await context.db.poll_messages.delete({ where: { id: poll.id } }).catch((deleteError) => {
+        context.logger.warn({ err: deleteError, pollId: poll.id }, "Failed to delete orphaned poll record");
+      });
+
+      throw error;
+    }
 
     // 마감 타이머 등록
     setTimeout(() => closePoll(poll.id, context), duration * 60 * 60 * 1000);

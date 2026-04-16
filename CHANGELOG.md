@@ -1,5 +1,24 @@
 # Changelog
 
+## [26.04.02] - 2026-04-16
+
+### Fixed
+- 디시인사이드 임베드 이미지 표시 안정화
+  - `dcimg*.dcinside.co.kr/viewimage.php` 이미지가 Referer 없이 `403`을 반환하는 케이스 대응
+  - 게시글 본문 이미지와 원본 첨부파일 다운로드 링크를 모두 후보로 수집
+  - 봇이 게시글 URL을 `Referer`로 포함해 이미지를 다운로드한 뒤 Discord 첨부파일(`attachment://`)로 임베드에 표시
+  - `application/octet-stream`으로 내려오는 이미지도 PNG/JPG/GIF/WEBP 파일 시그니처로 판별
+  - 캡차, 고정닉 아이콘, 로딩 이미지 등 게시글 본문이 아닌 시스템 이미지를 후보에서 제외
+- `/noti poll` 투표 생성 안정화
+  - 과거 실패한 생성 건의 `message_id = "pending"` unique 충돌로 새 투표 생성이 실패할 수 있던 문제 방지
+  - 투표별 고유 pending placeholder를 사용하고, 메시지 전송/DB 업데이트 실패 시 고아 레코드와 메시지를 정리
+- 커스텀 명령어와 내장 명령어 충돌 방지
+  - `noti`, `welcome`, `help`, `version`, `role`을 예약어에 추가
+  - 기존 DB에 충돌 커스텀 명령어가 있어도 slash command 등록이 중단되지 않도록 충돌 항목을 건너뜀
+
+### Technical
+- 패키지 버전을 `26.04.02`로 업데이트
+
 ## [26.04.01] - 2026-04-16
 
 ### Added

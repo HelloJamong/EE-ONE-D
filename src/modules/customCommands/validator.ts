@@ -1,4 +1,13 @@
-const RESERVED_COMMANDS = ["panel", "config", "cmd"];
+const RESERVED_COMMANDS = [
+  "panel",
+  "config",
+  "cmd",
+  "role",
+  "noti",
+  "welcome",
+  "help",
+  "version",
+];
 
 export function validateCommandName(name: string): { valid: boolean; error?: string } {
   // 1. 길이 및 문자 검증
