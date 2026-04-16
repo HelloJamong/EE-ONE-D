@@ -772,6 +772,8 @@ GitHub에서 최신 버전 확인하기 [클릭]
   - `https://gall.dcinside.com/mgallery/board/view/?id=...&no=...`
 - 모바일:
   - `https://m.dcinside.com/board/{갤러리ID}/{게시글번호}`
+  - `https://m.dcinside.com/mgallery/{갤러리ID}/{게시글번호}`
+  - `https://m.dcinside.com/mini/{갤러리ID}/{게시글번호}`
   - `https://m.dcinside.com/board/{갤러리ID}/{게시글번호}?recommend=1`
   - 쿼리 파라미터 포함 URL 지원 (v1.0.9+)
 
@@ -779,6 +781,7 @@ GitHub에서 최신 버전 확인하기 [클릭]
 - 게시글 제목
 - 갤러리명
 - 본문 요약 (최대 300자, 있는 경우만)
+- 본문 첫 번째 이미지 (있는 경우만, 갤러리 대문/기본 이미지는 제외)
 - 작성자 정보 (메시지 작성자)
 
 **참고사항:**

@@ -1,19 +1,35 @@
 import { EmbedBuilder, Message } from "discord.js";
-import { load } from "cheerio";
+import { load, type CheerioAPI } from "cheerio";
 import { TTLCache } from "../../shared/cache.js";
 import { BotModule, AppContext } from "../../types.js";
 
-const cache = new TTLCache<{ title: string; gallery: string; summary?: string }>(60_000);
+type DcPreview = {
+  title: string;
+  gallery: string;
+  summary?: string;
+  imageUrl?: string;
+};
+
+const cache = new TTLCache<DcPreview>(60_000);
 // 데스크톱: https://gall.dcinside.com/board/view/?id=dcbest&no=412451
-// 모바일: https://m.dcinside.com/board/dcbest/412451 또는 https://m.dcinside.com/board/eft/2730298?recommend=1
+// 모바일: https://m.dcinside.com/board/dcbest/412451, https://m.dcinside.com/mini/vtubersnipe/5199795
 const DC_REGEX_DESKTOP = /^https?:\/\/(m\.)?gall\.dcinside\.com\/(mgallery\/|mini\/)?board\/view\/?\?[^ \n]+$/i;
-const DC_REGEX_MOBILE = /^https?:\/\/m\.dcinside\.com\/board\/([^\/\s]+)\/(\d+)(\?.*)?$/i;
+const DC_REGEX_MOBILE = /^https?:\/\/m\.dcinside\.com\/(board|mgallery|mini)\/([^\/\s]+)\/(\d+)(\?.*)?$/i;
+const CONTENT_IMAGE_SELECTOR = ".write_div img, .writing_view_box img, .gallview_contents img";
+const IGNORED_IMAGE_PATTERNS = [
+  /\/loading_/i,
+  /\/gallview_loading_/i,
+  /\/noimg\.gif/i,
+  /\/dcin_logo\./i,
+  /\/tit_ngallery\./i,
+  /\/kcap_/i,
+];
 
 function normalizeUrl(raw: string) {
   try {
     const mobileMatch = raw.match(DC_REGEX_MOBILE);
     if (mobileMatch) {
-      // 모바일 URL은 그대로 사용 (갤러리 타입 구분 불가하므로 직접 파싱)
+      // 모바일 URL은 그대로 사용
       return raw;
     }
 
@@ -24,6 +40,38 @@ function normalizeUrl(raw: string) {
   } catch {
     return raw;
   }
+}
+
+function normalizeImageUrl(raw: string | undefined, baseUrl: string) {
+  const candidate = raw?.trim();
+  if (!candidate) return undefined;
+
+  try {
+    const url = new URL(candidate, baseUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+
+    const imageUrl = url.toString();
+    if (IGNORED_IMAGE_PATTERNS.some((pattern) => pattern.test(imageUrl))) return undefined;
+    return imageUrl;
+  } catch {
+    return undefined;
+  }
+}
+
+function extractFirstImageUrl($: CheerioAPI, baseUrl: string) {
+  // 갤러리 대문/기본 썸네일이 섞일 수 있는 og:image 대신,
+  // 실제 게시글 본문 영역에 포함된 첫 번째 이미지만 사용한다.
+  return $(CONTENT_IMAGE_SELECTOR)
+    .toArray()
+    .map((element) =>
+      normalizeImageUrl(
+        $(element).attr("data-original") ||
+          $(element).attr("data-src") ||
+          $(element).attr("src"),
+        baseUrl
+      )
+    )
+    .find((imageUrl): imageUrl is string => Boolean(imageUrl));
 }
 
 async function fetchPreview(url: string, logger: AppContext["logger"]) {
@@ -52,14 +100,15 @@ async function fetchPreview(url: string, logger: AppContext["logger"]) {
     $("meta[property='og:description']").attr("content") ||
     $("meta[name='description']").attr("content") ||
     undefined;
+  const imageUrl = extractFirstImageUrl($, url);
 
-  const preview = { title: title || "디시인사이드 게시글", gallery, summary };
+  const preview = { title: title || "디시인사이드 게시글", gallery, summary, imageUrl };
   cache.set(url, preview);
   logger.debug({ url, preview }, "Cached dcinside preview");
   return preview;
 }
 
-function buildEmbed(message: Message, url: string, preview: { title: string; gallery: string; summary?: string }) {
+function buildEmbed(message: Message, url: string, preview: DcPreview) {
   const embed = new EmbedBuilder()
     .setAuthor({
       name: message.member?.displayName ?? message.author.username,
@@ -74,6 +123,10 @@ function buildEmbed(message: Message, url: string, preview: { title: string; gal
   // summary가 있을 때만 description 설정 (빈 문자열은 에러 발생)
   if (preview.summary && preview.summary.trim().length > 0) {
     embed.setDescription(preview.summary.slice(0, 300));
+  }
+
+  if (preview.imageUrl) {
+    embed.setImage(preview.imageUrl);
   }
 
   return embed;
