@@ -1,5 +1,12 @@
 # Changelog
 
+## [26.04.04] - 2026-04-17
+
+### Fixed
+- 봇 컨테이너 재시작 루프 해결 (Prisma 마이그레이션 실패 상태 resolve)
+  - `poll_messages`, `poll_votes` 테이블이 DB에 이미 존재한 상태에서 마이그레이션 재실행 시 `42P07: relation already exists` 에러로 실패 기록
+  - `_prisma_migrations` 테이블의 `20260331000000_add_poll_tables` 레코드를 완료 상태로 업데이트하여 Prisma 차단 해제
+
 ## [26.04.03] - 2026-04-17
 
 ### Fixed
