@@ -1,5 +1,22 @@
 # Changelog
 
+## [26.04.03] - 2026-04-17
+
+### Fixed
+- 디시인사이드 모바일 URL 인식 불가 문제 수정
+  - 모바일 URL을 데스크톱 URL로 변환 후 스크래핑하도록 변경
+  - 모바일 페이지 HTML 구조가 달라 콘텐츠 추출 실패하던 문제 해결
+  - `board` / `mgallery` / `mini` 타입 모두 대응
+  - 임베드 링크는 사용자가 보낸 원본 모바일 URL 유지
+- `/noti poll` 공지사항 채널 미설정 시 모달 전에 즉시 안내 메시지 반환
+  - 기존: 모달 작성 후 제출해야 오류 확인 가능
+  - 변경: 채널 미설정 시 모달 진입 전에 즉시 안내
+
+### Technical
+- `docker-compose.yml` 봇 시작 시 DB 마이그레이션 자동 적용
+  - `docker compose pull && docker compose up -d`만으로 스키마 변경 자동 반영
+  - `command: sh -c "npm run migrate:deploy && npm start"` 추가
+
 ## [26.04.02] - 2026-04-16
 
 ### Fixed

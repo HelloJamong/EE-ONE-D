@@ -25,6 +25,7 @@ services:
     container_name: eeoned-bot
     env_file:
       - .env
+    command: sh -c "npm run migrate:deploy && npm start"
     depends_on:
       db:
         condition: service_healthy

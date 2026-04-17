@@ -30,20 +30,30 @@ const IGNORED_IMAGE_PATTERNS = [
   /\/fix_nik\.gif/i,
 ];
 
-function normalizeUrl(raw: string) {
+function normalizeUrl(raw: string): { fetchUrl: string; displayUrl: string } {
   try {
     const mobileMatch = raw.match(DC_REGEX_MOBILE);
     if (mobileMatch) {
-      // 모바일 URL은 그대로 사용
-      return raw;
+      const [, type, galleryId, postNo] = mobileMatch;
+      // 모바일 URL → 데스크톱 URL로 변환 (모바일 HTML 구조가 달라 스크래핑 실패)
+      let fetchUrl: string;
+      if (type === "mgallery") {
+        fetchUrl = `https://gall.dcinside.com/mgallery/board/view/?id=${galleryId}&no=${postNo}`;
+      } else if (type === "mini") {
+        fetchUrl = `https://gall.dcinside.com/mini/board/view/?id=${galleryId}&no=${postNo}`;
+      } else {
+        fetchUrl = `https://gall.dcinside.com/board/view/?id=${galleryId}&no=${postNo}`;
+      }
+      return { fetchUrl, displayUrl: raw };
     }
 
     // 데스크톱 URL 정규화
     const url = new URL(raw);
     url.hostname = "gall.dcinside.com";
-    return url.toString();
+    const fetchUrl = url.toString();
+    return { fetchUrl, displayUrl: fetchUrl };
   } catch {
-    return raw;
+    return { fetchUrl: raw, displayUrl: raw };
   }
 }
 
@@ -256,13 +266,13 @@ const dcEmbedModule: BotModule = {
 
       logger.debug({ content, isDesktopMatch, isMobileMatch }, "Processing DC link");
 
-      const url = normalizeUrl(content);
+      const { fetchUrl, displayUrl } = normalizeUrl(content);
       try {
-        const preview = await fetchPreview(url, logger);
+        const preview = await fetchPreview(fetchUrl, logger);
         const imageAttachment = preview.imageUrls.length > 0
-          ? await createEmbedImageAttachment(preview.imageUrls, url, logger)
+          ? await createEmbedImageAttachment(preview.imageUrls, fetchUrl, logger)
           : undefined;
-        const embed = buildEmbed(message, url, preview, imageAttachment?.name);
+        const embed = buildEmbed(message, displayUrl, preview, imageAttachment?.name);
 
         try {
           await message.channel.send({
@@ -273,7 +283,7 @@ const dcEmbedModule: BotModule = {
           if (!imageAttachment) throw sendError;
 
           logger.warn({ err: sendError }, "Failed to send attached dcinside preview image; retrying with remote image URL");
-          await message.channel.send({ embeds: [buildEmbed(message, url, preview)] });
+          await message.channel.send({ embeds: [buildEmbed(message, displayUrl, preview)] });
         }
 
         try {

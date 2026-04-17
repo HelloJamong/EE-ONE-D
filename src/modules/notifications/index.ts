@@ -92,6 +92,13 @@ const commands = [
           await handleRemove(interaction, context);
           break;
         case "poll": {
+          if (!settings?.notification_channel_id) {
+            await interaction.reply({
+              content: "공지사항 채널이 설정되지 않았습니다. `/config set notification_channel`을 먼저 실행해주세요.",
+              ephemeral: true,
+            });
+            return;
+          }
           const duration = interaction.options.getInteger("duration") ?? 1;
           const allowMultiple = interaction.options.getBoolean("allow_multiple") ?? false;
           const modal = createPollModal(duration, allowMultiple);
