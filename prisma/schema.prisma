@@ -36,7 +36,6 @@ model guild_settings {
   audit_events audit_events[]
   custom_commands custom_commands[]
   welcome_message welcome_message?
-  poll_messages poll_messages[]
 }
 
 model role_panels {
@@ -117,31 +116,3 @@ model welcome_message {
   guild guild_settings @relation(fields: [guild_id], references: [guild_id], onDelete: Cascade)
 }
 
-model poll_messages {
-  id             String       @id @default(cuid())
-  guild_id       String
-  channel_id     String
-  message_id     String       @unique
-  title          String
-  options        String[]
-  allow_multiple Boolean      @default(false)
-  ends_at        DateTime
-  closed         Boolean      @default(false)
-  created_by     String
-  created_at     DateTime     @default(now())
-
-  guild  guild_settings @relation(fields: [guild_id], references: [guild_id], onDelete: Cascade)
-  votes  poll_votes[]
-}
-
-model poll_votes {
-  id           String        @id @default(cuid())
-  poll_id      String
-  user_id      String
-  option_index Int
-  created_at   DateTime      @default(now())
-
-  poll poll_messages @relation(fields: [poll_id], references: [id], onDelete: Cascade)
-
-  @@unique([poll_id, user_id, option_index])
-}

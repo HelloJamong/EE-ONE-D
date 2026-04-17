@@ -1,6 +1,6 @@
 {
   "name": "ee-one-d",
-  "version": "26.04.02",
+  "version": "26.04.05",
   "description": "EE-ONE-D Discord 통합 관리 봇",
   "type": "module",
   "engines": {

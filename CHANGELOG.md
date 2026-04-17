@@ -1,5 +1,15 @@
 # Changelog
 
+## [26.04.05] - 2026-04-17
+
+### Removed
+- `/noti vote` 투표 기능 전체 제거
+  - 동작 불안정으로 인해 `poll.ts`, 관련 모달/핸들러 코드 삭제
+  - `poll_messages`, `poll_votes` DB 테이블 및 Prisma 스키마 제거
+
+### Database
+- `poll_messages`, `poll_votes` 테이블 삭제 마이그레이션 추가
+
 ## [26.04.04] - 2026-04-17
 
 ### Fixed
