@@ -109,10 +109,7 @@ function extractImageUrls($: CheerioAPI, baseUrl: string) {
   return uniqueDefined([...contentImages, ...attachmentImages]);
 }
 
-async function fetchPreview(url: string, logger: AppContext["logger"]) {
-  const cached = cache.get(url);
-  if (cached) return cached;
-
+async function scrapePage(url: string): Promise<DcPreview> {
   const res = await fetch(url, { headers: { "User-Agent": DC_USER_AGENT } });
   if (!res.ok) throw new Error(`Failed to fetch page: ${res.status}`);
   const html = await res.text();
@@ -138,7 +135,47 @@ async function fetchPreview(url: string, logger: AppContext["logger"]) {
   const imageUrls = extractImageUrls($, url);
   const imageUrl = imageUrls[0];
 
-  const preview = { title: title || "디시인사이드 게시글", gallery, summary, imageUrl, imageUrls };
+  return { title: title || "디시인사이드 게시글", gallery, summary, imageUrl, imageUrls };
+}
+
+function isGenericPreview(preview: DcPreview) {
+  return preview.title === "디시인사이드 게시글" || preview.gallery === "디시인사이드";
+}
+
+// 일반 갤러리 ↔ 마이너 갤러리 URL 교체 (모바일 /board/ URL은 두 타입 모두 가능)
+function alternateGalleryUrl(url: string): string | null {
+  if (url.includes("/mgallery/board/view/")) {
+    return url.replace("/mgallery/board/view/", "/board/view/");
+  }
+  if (url.includes("/board/view/") && !url.includes("/mgallery/")) {
+    return url.replace("/board/view/", "/mgallery/board/view/");
+  }
+  return null;
+}
+
+async function fetchPreview(url: string, logger: AppContext["logger"]) {
+  const cached = cache.get(url);
+  if (cached) return cached;
+
+  const preview = await scrapePage(url);
+
+  // 제목/갤러리가 기본값이면 갤러리 타입(일반↔마이너)을 바꿔 재시도
+  if (isGenericPreview(preview)) {
+    const altUrl = alternateGalleryUrl(url);
+    if (altUrl) {
+      try {
+        const altPreview = await scrapePage(altUrl);
+        if (!isGenericPreview(altPreview)) {
+          cache.set(url, altPreview);
+          logger.debug({ url, altUrl, altPreview }, "Cached dcinside preview via alternate gallery URL");
+          return altPreview;
+        }
+      } catch (err) {
+        logger.debug({ err, altUrl }, "Alternate gallery URL also failed");
+      }
+    }
+  }
+
   cache.set(url, preview);
   logger.debug({ url, preview }, "Cached dcinside preview");
   return preview;
