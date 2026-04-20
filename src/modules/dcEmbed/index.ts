@@ -9,6 +9,8 @@ type DcPreview = {
   summary?: string;
   imageUrl?: string;
   imageUrls: string[];
+  // og:image / twitter:image (dcimg 호스트 검증됨) — 영상 썸네일·GIF 정적 프리뷰 폴백용
+  metaImageUrl?: string;
 };
 
 const cache = new TTLCache<DcPreview>(60_000);
@@ -132,10 +134,17 @@ async function scrapePage(url: string): Promise<DcPreview> {
     $("meta[property='og:description']").attr("content") ||
     $("meta[name='description']").attr("content") ||
     undefined;
+
   const imageUrls = extractImageUrls($, url);
   const imageUrl = imageUrls[0];
 
-  return { title: title || "디시인사이드 게시글", gallery, summary, imageUrl, imageUrls };
+  // og:image / twitter:image → dcimg 호스트 검증 후 메타 이미지로 보관
+  // 영상 게시글(본문 이미지 없음)의 썸네일, 대용량 GIF의 정적 프리뷰 폴백으로 사용
+  const metaImageUrl =
+    normalizeImageUrl($("meta[property='og:image']").attr("content"), url) ??
+    normalizeImageUrl($("meta[name='twitter:image']").attr("content"), url);
+
+  return { title: title || "디시인사이드 게시글", gallery, summary, imageUrl, imageUrls, metaImageUrl };
 }
 
 function isGenericPreview(preview: DcPreview) {
@@ -204,53 +213,73 @@ function inferImageExtension(contentType: string | null, buffer: Buffer) {
   return undefined;
 }
 
+async function tryDownloadImage(
+  imageUrl: string,
+  referer: string,
+  logger: AppContext["logger"]
+): Promise<{ name: string; sourceUrl: string; attachment: AttachmentBuilder } | "oversized" | undefined> {
+  try {
+    const res = await fetch(imageUrl, {
+      headers: {
+        "User-Agent": DC_USER_AGENT,
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        Referer: referer,
+      },
+    });
+
+    if (!res.ok) {
+      logger.warn({ imageUrl, status: res.status }, "Failed to download dcinside preview image");
+      return undefined;
+    }
+
+    const contentLength = Number(res.headers.get("content-length") ?? "0");
+    if (contentLength > MAX_EMBED_IMAGE_BYTES) {
+      logger.warn({ imageUrl, contentLength }, "Oversized dcinside preview image; will try meta fallback");
+      return "oversized";
+    }
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.length === 0 || buffer.length > MAX_EMBED_IMAGE_BYTES) {
+      logger.warn({ imageUrl, size: buffer.length }, "Oversized dcinside preview image; will try meta fallback");
+      return "oversized";
+    }
+
+    const extension = inferImageExtension(res.headers.get("content-type"), buffer);
+    if (!extension) {
+      logger.warn({ imageUrl, contentType: res.headers.get("content-type") }, "Skipping non-image dcinside preview attachment");
+      return undefined;
+    }
+
+    const name = `dc-preview.${extension}`;
+    return { name, sourceUrl: imageUrl, attachment: new AttachmentBuilder(buffer, { name }) };
+  } catch (error) {
+    logger.warn({ err: error, imageUrl }, "Failed to prepare dcinside preview image attachment");
+    return undefined;
+  }
+}
+
 async function createEmbedImageAttachment(
   imageUrls: string[],
+  metaImageUrl: string | undefined,
   referer: string,
   logger: AppContext["logger"]
 ) {
+  let hadOversized = false;
+
   for (const imageUrl of imageUrls) {
-    try {
-      const res = await fetch(imageUrl, {
-        headers: {
-          "User-Agent": DC_USER_AGENT,
-          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-          Referer: referer,
-        },
-      });
-
-      if (!res.ok) {
-        logger.warn({ imageUrl, status: res.status }, "Failed to download dcinside preview image");
-        continue;
-      }
-
-      const contentLength = Number(res.headers.get("content-length") ?? "0");
-      if (contentLength > MAX_EMBED_IMAGE_BYTES) {
-        logger.warn({ imageUrl, contentLength }, "Skipping oversized dcinside preview image");
-        continue;
-      }
-
-      const buffer = Buffer.from(await res.arrayBuffer());
-      if (buffer.length === 0 || buffer.length > MAX_EMBED_IMAGE_BYTES) {
-        logger.warn({ imageUrl, size: buffer.length }, "Skipping invalid-sized dcinside preview image");
-        continue;
-      }
-
-      const extension = inferImageExtension(res.headers.get("content-type"), buffer);
-      if (!extension) {
-        logger.warn({ imageUrl, contentType: res.headers.get("content-type") }, "Skipping non-image dcinside preview attachment");
-        continue;
-      }
-
-      const name = `dc-preview.${extension}`;
-      return {
-        name,
-        sourceUrl: imageUrl,
-        attachment: new AttachmentBuilder(buffer, { name }),
-      };
-    } catch (error) {
-      logger.warn({ err: error, imageUrl }, "Failed to prepare dcinside preview image attachment");
+    const result = await tryDownloadImage(imageUrl, referer, logger);
+    if (result === "oversized") {
+      hadOversized = true;
+      continue;
     }
+    if (result) return result;
+  }
+
+  // 본문 이미지가 없거나(영상 게시글) 모두 용량 초과(대용량 GIF)인 경우
+  // og:image / twitter:image 의 정적 썸네일로 폴백
+  if ((imageUrls.length === 0 || hadOversized) && metaImageUrl) {
+    const result = await tryDownloadImage(metaImageUrl, referer, logger);
+    if (result && result !== "oversized") return result;
   }
 
   return undefined;
@@ -306,10 +335,14 @@ const dcEmbedModule: BotModule = {
       const { fetchUrl, displayUrl } = normalizeUrl(content);
       try {
         const preview = await fetchPreview(fetchUrl, logger);
-        const imageAttachment = preview.imageUrls.length > 0
-          ? await createEmbedImageAttachment(preview.imageUrls, fetchUrl, logger)
+        const hasAnyCandidates = preview.imageUrls.length > 0 || !!preview.metaImageUrl;
+        const imageAttachment = hasAnyCandidates
+          ? await createEmbedImageAttachment(preview.imageUrls, preview.metaImageUrl, fetchUrl, logger)
           : undefined;
-        const embed = buildEmbed(message, displayUrl, preview, imageAttachment?.name);
+
+        // 첨부 성공 시 attachment:// URL, 실패 시 본문 이미지 URL 직접 사용
+        const embedImageName = imageAttachment?.name;
+        const embed = buildEmbed(message, displayUrl, preview, embedImageName);
 
         try {
           await message.channel.send({
