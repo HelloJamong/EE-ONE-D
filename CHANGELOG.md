@@ -1,5 +1,12 @@
 # Changelog
 
+## [26.05.02] - 2026-05-28
+
+### Technical
+- Docker 이미지 버전 레이블 추가 (`org.opencontainers.image.version`)
+  - Synology Container Manager 등 컨테이너 관리 도구의 자동 업데이트 감지 지원
+  - 빌드 시 `VERSION` ARG로 태그 버전이 이미지 레이블에 자동 주입됨
+
 ## [26.05.01] - 2026-05-28
 
 ### Added

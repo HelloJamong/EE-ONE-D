@@ -12,6 +12,8 @@ COPY src ./src
 RUN npm run prisma:generate && npm run build
 
 FROM node:20-alpine AS runner
+ARG VERSION=latest
+LABEL org.opencontainers.image.version="${VERSION}"
 ENV NODE_ENV=production
 WORKDIR /app
 
