@@ -8,6 +8,7 @@ import configModule from "./modules/config/index.js";
 import rolePanelsModule from "./modules/rolePanels/index.js";
 import emojiExpandModule from "./modules/emojiExpand/index.js";
 import dcEmbedModule from "./modules/dcEmbed/index.js";
+import igEmbedModule from "./modules/igEmbed/index.js";
 import auditModule from "./modules/audit/index.js";
 import customCommandsModule from "./modules/customCommands/index.js";
 import roleStatsModule from "./modules/roleStats/index.js";
@@ -37,6 +38,7 @@ const modules: BotModule[] = [
   rolePanelsModule,
   emojiExpandModule,
   dcEmbedModule,
+  igEmbedModule,
   auditModule,
   customCommandsModule,
   roleStatsModule,
