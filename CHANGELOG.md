@@ -1,5 +1,11 @@
 # Changelog
 
+## [26.05.03] - 2026-06-13
+
+### Technical
+- `package-lock.json`의 프로젝트 버전 메타데이터를 `package.json`과 동기화
+- 선택 의존성 `fsevents`의 lockfile 메타데이터 정리
+
 ## [26.05.02] - 2026-05-28
 
 ### Technical
