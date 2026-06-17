@@ -13,6 +13,7 @@ import {
   AttachmentBuilder,
 } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
+import { BoundedBufferCache, BufferFile } from "../../shared/cache.js";
 
 const COLORS: Record<string, number> = {
   VOICE_JOIN: 0x57f287,
@@ -60,7 +61,10 @@ async function sendLog(
   options: SendLogOptions = {}
 ) {
   const enabled = await isAuditEnabled(context, guildId);
-  if (!enabled) return;
+  if (!enabled) {
+    context.logger.debug({ guildId, eventType }, "Audit skipped: logging disabled (no log channel)");
+    return;
+  }
 
   await context.db.audit_events.create({
     data: {
@@ -74,9 +78,18 @@ async function sendLog(
   });
 
   const settings = await fetchSettings(context, guildId);
-  if (!settings?.log_channel_id) return;
+  if (!settings?.log_channel_id) {
+    context.logger.debug({ guildId, eventType }, "Audit skipped: no log channel set");
+    return;
+  }
   const channel = context.client.channels.cache.get(settings.log_channel_id) as TextChannel;
-  if (!channel || channel.type !== ChannelType.GuildText) return;
+  if (!channel || channel.type !== ChannelType.GuildText) {
+    context.logger.debug(
+      { guildId, eventType, channelId: settings.log_channel_id },
+      "Audit skipped: log channel not found in cache"
+    );
+    return;
+  }
 
   const embed = new EmbedBuilder()
     .setDescription(messageBuilder())
@@ -133,6 +146,33 @@ const auditModule: BotModule = {
   commands,
   register: (context: AppContext) => {
     const { client, logger } = context;
+
+    // 삭제 이미지 복원용: 게시 시점 이미지 바이트를 유한 메모리에 보관(바이트 상한 LRU).
+    // 디스코드 CDN URL은 ~24h 후 만료되고 오래된 메시지는 partial로 와 삭제 시점 다운로드가 불가능하므로,
+    // 게시 시점에 미리 받아둔다.
+    const MAX_IMAGE_CACHE_BYTES = 200 * 1024 * 1024; // 총 200MB
+    const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 개별 이미지 10MB 초과는 스킵
+    const imageCache = new BoundedBufferCache(MAX_IMAGE_CACHE_BYTES);
+
+    client.on("messageCreate", async (message: Message) => {
+      // ponytail: audit 활성 여부를 매 메시지 DB 조회하지 않고 항상 캐시(단일 길드 봇, 메모리는 바이트 상한으로 제한)
+      if (!message.guild || message.author?.bot) return;
+      const images = message.attachments.filter((a) => a.contentType?.startsWith("image/"));
+      if (images.size === 0) return;
+      try {
+        const files: BufferFile[] = [];
+        for (const [, attachment] of images) {
+          if (attachment.size > MAX_IMAGE_BYTES) continue;
+          const response = await fetch(attachment.url);
+          if (!response.ok) continue;
+          const data = Buffer.from(await response.arrayBuffer());
+          files.push({ name: attachment.name ?? "image.png", data });
+        }
+        if (files.length > 0) imageCache.set(message.id, files);
+      } catch (err) {
+        logger.warn({ err, messageId: message.id }, "Failed to cache image attachment");
+      }
+    });
 
     client.on("voiceStateUpdate", async (oldState: VoiceState, newState: VoiceState) => {
       const guildId = newState.guild.id;
@@ -241,9 +281,15 @@ const auditModule: BotModule = {
           }
         }
 
-        // 이미지 다운로드 및 재업로드
+        // 이미지 복원: 게시 시점에 캐시한 원본을 우선 사용(가장 신뢰도 높음, partial 메시지여도 동작).
+        // 캐시 미스일 때만 삭제 시점 라이브 다운로드(폴백, CDN URL 만료 시 실패 가능).
         const files: AttachmentBuilder[] = [];
-        if (imageAttachments && imageAttachments.size > 0) {
+        const cached = imageCache.take(message.id);
+        if (cached) {
+          for (const f of cached) {
+            files.push(new AttachmentBuilder(f.data, { name: f.name }));
+          }
+        } else if (imageAttachments && imageAttachments.size > 0) {
           for (const [, attachment] of imageAttachments) {
             try {
               const response = await fetch(attachment.url);
@@ -326,6 +372,7 @@ const auditModule: BotModule = {
     });
 
     client.on("guildMemberAdd", async (member: GuildMember) => {
+      logger.info({ memberId: member.id, guildId: member.guild.id }, "guildMemberAdd received");
       try {
         const author = {
           name: member.user.tag,
@@ -348,11 +395,15 @@ const auditModule: BotModule = {
     });
 
     client.on("guildMemberRemove", async (member: GuildMember | PartialGuildMember) => {
+      logger.info({ memberId: member.id, guildId: member.guild.id }, "guildMemberRemove received");
       try {
-        const author = {
-          name: member.user.tag,
-          iconURL: member.user.displayAvatarURL(),
-        };
+        // partial 멤버는 user가 없을 수 있으므로 안전 처리(예외로 인한 조용한 누락 방지)
+        const author = member.user
+          ? {
+              name: member.user.tag,
+              iconURL: member.user.displayAvatarURL(),
+            }
+          : { name: member.id };
 
         const footer = `ID: ${member.id}`;
 
