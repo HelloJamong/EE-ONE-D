@@ -27,6 +27,12 @@ const previewCache = new TTLCache<IgPreview>(5 * 60_000);
 
 let csrfCache: { token: string; cookies: string; expiresAt: number } | null = null;
 
+class IgUnavailableError extends Error {
+  constructor(public reason: "graphql_error" | "no_media") {
+    super(reason);
+  }
+}
+
 function extractShortcode(url: string): string | null {
   const match = url.match(IG_REGEX);
   return match ? match[3] : null;
@@ -95,10 +101,10 @@ async function fetchPreview(
   if (!media) {
     if (data?.errors?.length) {
       logger.warn({ shortcode, errors: data.errors }, "Instagram GraphQL returned an error — doc_id may be stale or post requires login");
-    } else {
-      logger.warn({ shortcode }, "Instagram media null — private account, deleted post, or age/sensitive-content restricted");
+      throw new IgUnavailableError("graphql_error");
     }
-    throw new Error("Instagram media not available");
+    logger.warn({ shortcode }, "Instagram media null — private account, deleted post, or age/sensitive-content restricted");
+    throw new IgUnavailableError("no_media");
   }
 
   const owner = media.owner as Record<string, unknown>;
@@ -155,16 +161,18 @@ function buildEmbed(
   preview: IgPreview,
   attachmentName?: string
 ) {
-  const profileUrl = `https://www.instagram.com/${preview.username}/`;
-  const authorName = preview.fullName
+  const igAuthorName = preview.fullName
     ? `${preview.fullName} (@${preview.username})`
     : `@${preview.username}`;
 
   const embed = new EmbedBuilder()
-    .setAuthor({ name: authorName, url: profileUrl })
+    .setAuthor({
+      name: message.member?.displayName ?? message.author.username,
+      iconURL: message.member?.displayAvatarURL({ size: 64 }) ?? message.author.displayAvatarURL({ size: 64 }),
+    })
     .setTitle(preview.isVideo ? "Instagram 동영상 보기" : "Instagram 게시물 보기")
     .setURL(preview.postUrl)
-    .setFooter({ text: "Instagram" })
+    .setFooter({ text: `Instagram · ${igAuthorName}` })
     .setColor(0xe1306c)
     .setTimestamp(message.createdAt);
 
@@ -224,7 +232,25 @@ const igEmbedModule: BotModule = {
         }
       } catch (err) {
         logger.warn({ err, content }, "Failed to fetch Instagram preview");
-        await message.react("⚠️").catch(() => {});
+
+        const reason = err instanceof IgUnavailableError && err.reason === "graphql_error"
+          ? "일시적으로 미리보기를 가져오지 못했어요. 잠시 후 다시 시도해주세요."
+          : "비공개 계정, 삭제된 게시물, 또는 로그인·연령 확인이 필요한 게시물이라 미리보기를 가져올 수 없어요.";
+
+        const fallback = new EmbedBuilder()
+          .setAuthor({
+            name: message.member?.displayName ?? message.author.username,
+            iconURL: message.member?.displayAvatarURL({ size: 64 }) ?? message.author.displayAvatarURL({ size: 64 }),
+          })
+          .setDescription(`${reason}\n\n[인스타그램에서 직접 보기](${postUrl})`)
+          .setColor(0x8e8e8e);
+
+        try {
+          await message.channel.send({ embeds: [fallback] });
+          await message.delete();
+        } catch (fallbackErr) {
+          logger.warn({ err: fallbackErr }, "Failed to send IG fallback notice");
+        }
       }
     });
   },
