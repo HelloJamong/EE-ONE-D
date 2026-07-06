@@ -17,9 +17,10 @@ type IgPreview = {
 // https://www.instagram.com/tv/{shortcode}/
 const IG_REGEX = /^https?:\/\/(www\.)?instagram\.com\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)\/?(\?[^ \n]*)?$/i;
 
-const IG_DOC_ID = "9510064595728286";
-const IG_APP_ID = "936619743392459";
 const IG_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+// GraphQL 프로토콜 상수(도메인 값 아님) — doc_id/app_id처럼 IG가 바꾸는 값이 아니라 env로 안 뺌.
+const IG_FB_LSD = "0";
+const IG_ASBD_ID = "129477";
 const MAX_EMBED_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const previewCache = new TTLCache<IgPreview>(5 * 60_000);
@@ -48,20 +49,21 @@ async function getCSRFToken(): Promise<{ token: string; cookies: string }> {
   return { token, cookies };
 }
 
-async function fetchPreview(shortcode: string, postUrl: string, logger: AppContext["logger"]): Promise<IgPreview> {
+async function fetchPreview(
+  shortcode: string,
+  postUrl: string,
+  logger: AppContext["logger"],
+  docId: string,
+  appId: string
+): Promise<IgPreview> {
   const cached = previewCache.get(shortcode);
   if (cached) return cached;
 
   const { token, cookies } = await getCSRFToken();
 
   const body = new URLSearchParams({
-    variables: JSON.stringify({
-      shortcode,
-      fetch_tagged_user_count: null,
-      hoisted_comment_id: null,
-      hoisted_reply_id: null,
-    }),
-    doc_id: IG_DOC_ID,
+    variables: JSON.stringify({ shortcode }),
+    doc_id: docId,
   });
 
   const res = await fetch("https://www.instagram.com/graphql/query", {
@@ -75,7 +77,9 @@ async function fetchPreview(shortcode: string, postUrl: string, logger: AppConte
       "Origin": "https://www.instagram.com",
       "Referer": "https://www.instagram.com/",
       "Cookie": cookies,
-      "X-IG-App-ID": IG_APP_ID,
+      "X-IG-App-ID": appId,
+      "X-FB-LSD": IG_FB_LSD,
+      "X-ASBD-ID": IG_ASBD_ID,
     },
     body: body.toString(),
   });
@@ -83,12 +87,17 @@ async function fetchPreview(shortcode: string, postUrl: string, logger: AppConte
   if (!res.ok) throw new Error(`Instagram GraphQL request failed: ${res.status}`);
 
   const data = await res.json() as {
-    data?: { xdt_shortcode_media?: Record<string, unknown> | null };
+    data?: { xdt_shortcode_media?: Record<string, unknown> | null } | null;
+    errors?: Array<{ message?: string; severity?: string }>;
   };
   const media = data?.data?.xdt_shortcode_media as Record<string, unknown> | null | undefined;
 
   if (!media) {
-    logger.warn({ shortcode }, "Instagram media null — private account, deleted post, or doc_id changed");
+    if (data?.errors?.length) {
+      logger.warn({ shortcode, errors: data.errors }, "Instagram GraphQL returned an error — doc_id may be stale or post requires login");
+    } else {
+      logger.warn({ shortcode }, "Instagram media null — private account, deleted post, or age/sensitive-content restricted");
+    }
     throw new Error("Instagram media not available");
   }
 
@@ -153,6 +162,7 @@ function buildEmbed(
 
   const embed = new EmbedBuilder()
     .setAuthor({ name: authorName, url: profileUrl })
+    .setTitle(preview.isVideo ? "Instagram 동영상 보기" : "Instagram 게시물 보기")
     .setURL(preview.postUrl)
     .setFooter({ text: "Instagram" })
     .setColor(0xe1306c)
@@ -172,7 +182,7 @@ function buildEmbed(
 const igEmbedModule: BotModule = {
   name: "igEmbed",
   register: (context: AppContext) => {
-    const { client, logger } = context;
+    const { client, logger, config } = context;
 
     client.on("messageCreate", async (message) => {
       if (!message.guild || message.author.bot) return;
@@ -192,7 +202,7 @@ const igEmbedModule: BotModule = {
       const postUrl = content.split("?")[0].replace(/\/$/, "") + "/";
 
       try {
-        const preview = await fetchPreview(shortcode, postUrl, logger);
+        const preview = await fetchPreview(shortcode, postUrl, logger, config.IG_DOC_ID, config.IG_APP_ID);
         const attachment = await tryDownloadImage(preview.displayUrl, logger);
         const embed = buildEmbed(message, preview, attachment?.name ?? undefined);
 
@@ -214,6 +224,7 @@ const igEmbedModule: BotModule = {
         }
       } catch (err) {
         logger.warn({ err, content }, "Failed to fetch Instagram preview");
+        await message.react("⚠️").catch(() => {});
       }
     });
   },

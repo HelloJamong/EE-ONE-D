@@ -11,6 +11,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   NODE_ENV: z.string().default("production"),
   LOG_LEVEL: z.string().default("info"),
+  // Instagram GraphQL 비공개 API 값. IG가 스키마를 바꾸면 깨지므로 재배포 없이 갱신 가능하도록 env로 분리.
+  IG_DOC_ID: z.string().default("10015901848480474"),
+  IG_APP_ID: z.string().default("936619743392459"),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
