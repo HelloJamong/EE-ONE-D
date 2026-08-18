@@ -96,12 +96,19 @@ async function fetchPreview(
   const data = await res.json() as {
     data?: { xdt_shortcode_media?: Record<string, unknown> | null } | null;
     errors?: Array<{ message?: string; severity?: string }>;
+    require_login?: boolean;
+    status?: string;
   };
   const media = data?.data?.xdt_shortcode_media as Record<string, unknown> | null | undefined;
 
   if (!media) {
     if (data?.errors?.length) {
       logger.warn({ shortcode, errors: data.errors }, "Instagram GraphQL returned an error — doc_id may be stale or post requires login");
+      throw new IgUnavailableError("graphql_error");
+    }
+    // 인스타그램이 세션을 레이트리밋/차단할 때 data/errors 없이 require_login+status만 내려줌 — 실제 비공개/삭제와 구분
+    if (data?.require_login || data?.status === "fail") {
+      logger.warn({ shortcode, data }, "Instagram GraphQL request was rate-limited or requires login — not a real private/deleted post");
       throw new IgUnavailableError("graphql_error");
     }
     logger.warn({ shortcode }, "Instagram media null — private account, deleted post, or age/sensitive-content restricted");
@@ -124,6 +131,32 @@ async function fetchPreview(
   previewCache.set(shortcode, preview);
   logger.debug({ shortcode, username: preview.username }, "Cached Instagram preview");
   return preview;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// 인스타그램 레이트리밋(graphql_error)은 몇 초 뒤 재시도하면 풀리는 경우가 있어 짧게 재시도
+const GRAPHQL_ERROR_RETRY_DELAYS_MS = [3000, 6000];
+
+async function fetchPreviewWithRetry(
+  shortcode: string,
+  postUrl: string,
+  logger: AppContext["logger"],
+  docId: string,
+  appId: string
+): Promise<IgPreview> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetchPreview(shortcode, postUrl, logger, docId, appId);
+    } catch (err) {
+      const isTransient = err instanceof IgUnavailableError && err.reason === "graphql_error";
+      if (!isTransient || attempt >= GRAPHQL_ERROR_RETRY_DELAYS_MS.length) throw err;
+      logger.debug({ shortcode, attempt }, "Retrying Instagram preview after transient error");
+      await sleep(GRAPHQL_ERROR_RETRY_DELAYS_MS[attempt]);
+    }
+  }
 }
 
 async function tryDownloadImage(
@@ -211,7 +244,7 @@ const igEmbedModule: BotModule = {
       const postUrl = content.split(/[?&]/)[0].replace(/\/$/, "") + "/";
 
       try {
-        const preview = await fetchPreview(shortcode, postUrl, logger, config.IG_DOC_ID, config.IG_APP_ID);
+        const preview = await fetchPreviewWithRetry(shortcode, postUrl, logger, config.IG_DOC_ID, config.IG_APP_ID);
         const attachment = await tryDownloadImage(preview.displayUrl, logger);
         const embed = buildEmbed(message, preview, attachment?.name ?? undefined);
 
@@ -234,7 +267,8 @@ const igEmbedModule: BotModule = {
       } catch (err) {
         logger.warn({ err, content }, "Failed to fetch Instagram preview");
 
-        const reason = err instanceof IgUnavailableError && err.reason === "graphql_error"
+        const isTransient = err instanceof IgUnavailableError && err.reason === "graphql_error";
+        const reason = isTransient
           ? "일시적으로 미리보기를 가져오지 못했어요. 잠시 후 다시 시도해주세요."
           : "비공개 계정, 삭제된 게시물, 또는 로그인·연령 확인이 필요한 게시물이라 미리보기를 가져올 수 없어요.";
 
@@ -248,7 +282,10 @@ const igEmbedModule: BotModule = {
 
         try {
           await message.channel.send({ embeds: [fallback] });
-          await message.delete();
+          // 일시적 오류는 재시도로 풀릴 수 있으니 원본 링크 메시지를 보존 (재전송 불필요)
+          if (!isTransient) {
+            await message.delete();
+          }
         } catch (fallbackErr) {
           logger.warn({ err: fallbackErr }, "Failed to send IG fallback notice");
         }
