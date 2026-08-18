@@ -34,14 +34,14 @@ GitHub 릴리즈에서 최신 버전의 배포 파일을 다운로드합니다:
 curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/latest/download/docker-compose.yml
 
 # .env.example 다운로드
-curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/latest/download/default.env.example
+curl -L https://github.com/HelloJamong/EE-ONE-D/releases/latest/download/.env.example -o .env.example
 ```
 
 **특정 버전 다운로드:**
 ```bash
 VERSION=v1.0.0
 curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/download/${VERSION}/docker-compose.yml
-curl -LO https://github.com/HelloJamong/EE-ONE-D/releases/download/${VERSION}/default.env.example
+curl -L https://github.com/HelloJamong/EE-ONE-D/releases/download/${VERSION}/.env.example -o .env.example
 ```
 
 ### 3. 환경 변수 설정
@@ -64,7 +64,7 @@ DISCORD_CLIENT_ID=your-client-id-here
 
 # 명령어 범위 설정
 COMMAND_SCOPE=guild              # guild: 단일 서버, global: 모든 서버
-DISCORD_GUILD_ID=your-guild-id   # guild 모드 시 필수
+DISCORD_GUILD_ID=your-guild-id   # guild 모드 필수, global 모드에서는 봇 상태 관리 서버 지정
 
 # 데이터베이스 (기본값 사용 권장)
 DATABASE_URL=postgresql://postgres:postgres@db:5432/eeoned?schema=public
@@ -115,9 +115,9 @@ docker compose ps
 ### 역할 패널 생성
 
 ```
-/panel create <패널이름> <모드>
-/panel add <패널이름> <역할> <버튼레이블> <이모지>
-/panel publish <패널이름>
+/panel create name:알림역할 channel:#역할선택
+/panel add panel_id:<패널ID> emoji:<커스텀이모지> role:@역할 label:버튼레이블
+/panel publish panel_id:<패널ID>
 ```
 
 ### 공지사항 발송
@@ -131,8 +131,10 @@ Modal이 표시되면 제목과 내용을 입력합니다. `@역할이름`, `#�
 ### 커스텀 명령어 추가
 
 ```
-/cmd add <명령어이름> <응답내용>
+/cmd add
 ```
+
+Modal이 표시되면 명령어 이름과 응답 내용을 입력합니다.
 
 자세한 사용법은 [명령어 가이드](docs/COMMANDS.md)를 참고하세요.
 

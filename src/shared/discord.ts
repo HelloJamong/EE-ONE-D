@@ -11,6 +11,7 @@ import {
 import { AppConfig } from "./env.js";
 import { Logger } from "pino";
 import { SlashCommand, AppContext } from "../types.js";
+import { parseCustomCommandResponses } from "./customCommandResponse.js";
 
 export function createDiscordClient(config: AppConfig) {
   const client = new Client({
@@ -107,6 +108,11 @@ export async function dispatchCommand(
   commands: SlashCommand[],
   context: AppContext
 ) {
+  if (!interaction.guildId) {
+    await interaction.reply({ content: "이 명령어는 Discord 서버에서만 사용할 수 있습니다.", ephemeral: true });
+    return;
+  }
+
   // 1. 고정 명령어 찾기
   const staticCommand = commands.find((cmd) => cmd.data.name === interaction.commandName);
   if (staticCommand) {
@@ -127,7 +133,7 @@ export async function dispatchCommand(
   const customCommand = await context.db.custom_commands.findUnique({
     where: {
       guild_id_name: {
-        guild_id: interaction.guildId!,
+        guild_id: interaction.guildId,
         name: interaction.commandName,
       },
     },
@@ -135,33 +141,34 @@ export async function dispatchCommand(
 
   if (customCommand) {
     try {
-      // 1. 랜덤 응답 처리: |||로 구분된 여러 응답 중 하나 선택
-      const responses = customCommand.response.split("|||").map((r) => r.trim());
+      const responses = parseCustomCommandResponses(customCommand.response);
       const selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+      if (!selectedResponse) throw new Error("Custom command has no valid response");
 
-      // 2. 임베드 처리: EMBED:로 시작하면 임베드로 전송
-      if (selectedResponse.startsWith("EMBED:")) {
-        const content = selectedResponse.slice(6); // "EMBED:" 제거
-        const parts = content.split("|||").map((p) => p.trim());
-
-        const title = parts[0] || "공지";
-        const description = parts[1] || "";
-
+      if (selectedResponse.type === "embed") {
         const { EmbedBuilder } = await import("discord.js");
         const embed = new EmbedBuilder()
-          .setTitle(title)
-          .setDescription(description)
+          .setTitle(selectedResponse.title || "공지")
           .setColor(0x5865f2)
           .setTimestamp();
+        if (selectedResponse.description) embed.setDescription(selectedResponse.description);
 
         await interaction.reply({ embeds: [embed], ephemeral: false });
       } else {
-        // 일반 텍스트 응답
-        await interaction.reply({ content: selectedResponse, ephemeral: false });
+        const chunks = selectedResponse.content.match(/[\s\S]{1,2000}/g) ?? [];
+        if (!chunks[0]) throw new Error("Custom command has an empty response");
+        await interaction.reply({ content: chunks[0], ephemeral: false });
+        for (const chunk of chunks.slice(1)) {
+          await interaction.followUp({ content: chunk, ephemeral: false });
+        }
       }
     } catch (error) {
       context.logger.error({ err: error }, "Custom command execution failed");
-      await interaction.reply({ content: "명령 실행 중 오류가 발생했습니다.", ephemeral: true });
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: "명령 실행 중 오류가 발생했습니다.", ephemeral: true });
+      } else {
+        await interaction.reply({ content: "명령 실행 중 오류가 발생했습니다.", ephemeral: true });
+      }
     }
     return;
   }

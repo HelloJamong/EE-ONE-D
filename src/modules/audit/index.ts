@@ -14,6 +14,7 @@ import {
 } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
 import { BoundedBufferCache, BufferFile } from "../../shared/cache.js";
+import { safeEventHandler } from "../../shared/events.js";
 
 const COLORS: Record<string, number> = {
   VOICE_JOIN: 0x57f287,
@@ -60,8 +61,8 @@ async function sendLog(
   messageBuilder: () => string,
   options: SendLogOptions = {}
 ) {
-  const enabled = await isAuditEnabled(context, guildId);
-  if (!enabled) {
+  const settings = await fetchSettings(context, guildId);
+  if (!settings?.log_channel_id) {
     context.logger.debug({ guildId, eventType }, "Audit skipped: logging disabled (no log channel)");
     return;
   }
@@ -77,11 +78,6 @@ async function sendLog(
     },
   });
 
-  const settings = await fetchSettings(context, guildId);
-  if (!settings?.log_channel_id) {
-    context.logger.debug({ guildId, eventType }, "Audit skipped: no log channel set");
-    return;
-  }
   const channel = context.client.channels.cache.get(settings.log_channel_id) as TextChannel;
   if (!channel || channel.type !== ChannelType.GuildText) {
     context.logger.debug(
@@ -152,14 +148,17 @@ const auditModule: BotModule = {
     // 게시 시점에 미리 받아둔다.
     const MAX_IMAGE_CACHE_BYTES = 200 * 1024 * 1024; // 총 200MB
     const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 개별 이미지 10MB 초과는 스킵
-    const imageCache = new BoundedBufferCache(MAX_IMAGE_CACHE_BYTES);
+    const IMAGE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+    const imageCache = new BoundedBufferCache(MAX_IMAGE_CACHE_BYTES, IMAGE_CACHE_TTL_MS);
+    const pruneTimer = setInterval(() => imageCache.pruneExpired(), 60 * 60 * 1000);
+    pruneTimer.unref();
 
-    client.on("messageCreate", async (message: Message) => {
-      // ponytail: audit 활성 여부를 매 메시지 DB 조회하지 않고 항상 캐시(단일 길드 봇, 메모리는 바이트 상한으로 제한)
+    client.on("messageCreate", safeEventHandler(logger, "audit:messageCreate", async (message: Message) => {
       if (!message.guild || message.author?.bot) return;
       const images = message.attachments.filter((a) => a.contentType?.startsWith("image/"));
       if (images.size === 0) return;
       try {
+        if (!(await isAuditEnabled(context, message.guild.id))) return;
         const files: BufferFile[] = [];
         for (const [, attachment] of images) {
           if (attachment.size > MAX_IMAGE_BYTES) continue;
@@ -172,9 +171,9 @@ const auditModule: BotModule = {
       } catch (err) {
         logger.warn({ err, messageId: message.id }, "Failed to cache image attachment");
       }
-    });
+    }));
 
-    client.on("voiceStateUpdate", async (oldState: VoiceState, newState: VoiceState) => {
+    client.on("voiceStateUpdate", safeEventHandler(logger, "audit:voiceStateUpdate", async (oldState: VoiceState, newState: VoiceState) => {
       const guildId = newState.guild.id;
       if (oldState.channelId === newState.channelId) return;
       try {
@@ -235,9 +234,9 @@ const auditModule: BotModule = {
       } catch (error) {
         logger.warn({ err: error }, "Voice audit failed");
       }
-    });
+    }));
 
-    client.on("messageDelete", async (message: Message | PartialMessage) => {
+    client.on("messageDelete", safeEventHandler(logger, "audit:messageDelete", async (message: Message | PartialMessage) => {
       if (!message.guild || message.author?.bot) return;
       try {
         const attachments = message.attachments?.map((a) => ({
@@ -326,9 +325,9 @@ const auditModule: BotModule = {
       } catch (error) {
         logger.warn({ err: error }, "Message delete audit failed");
       }
-    });
+    }));
 
-    client.on("messageUpdate", async (oldMessage: Message | PartialMessage, newMessage: Message | PartialMessage) => {
+    client.on("messageUpdate", safeEventHandler(logger, "audit:messageUpdate", async (oldMessage: Message | PartialMessage, newMessage: Message | PartialMessage) => {
       if (!newMessage.guild || newMessage.author?.bot) return;
       if (oldMessage.content === newMessage.content) return;
       try {
@@ -369,9 +368,9 @@ const auditModule: BotModule = {
       } catch (error) {
         logger.warn({ err: error }, "Message edit audit failed");
       }
-    });
+    }));
 
-    client.on("guildMemberAdd", async (member: GuildMember) => {
+    client.on("guildMemberAdd", safeEventHandler(logger, "audit:guildMemberAdd", async (member: GuildMember) => {
       logger.info({ memberId: member.id, guildId: member.guild.id }, "guildMemberAdd received");
       try {
         const author = {
@@ -392,9 +391,9 @@ const auditModule: BotModule = {
       } catch (error) {
         logger.warn({ err: error }, "Member join audit failed");
       }
-    });
+    }));
 
-    client.on("guildMemberRemove", async (member: GuildMember | PartialGuildMember) => {
+    client.on("guildMemberRemove", safeEventHandler(logger, "audit:guildMemberRemove", async (member: GuildMember | PartialGuildMember) => {
       logger.info({ memberId: member.id, guildId: member.guild.id }, "guildMemberRemove received");
       try {
         // partial 멤버는 user가 없을 수 있으므로 안전 처리(예외로 인한 조용한 누락 방지)
@@ -418,9 +417,9 @@ const auditModule: BotModule = {
       } catch (error) {
         logger.warn({ err: error }, "Member leave audit failed");
       }
-    });
+    }));
 
-    client.on("guildMemberUpdate", async (oldMember: GuildMember | PartialGuildMember, newMember: GuildMember) => {
+    client.on("guildMemberUpdate", safeEventHandler(logger, "audit:guildMemberUpdate", async (oldMember: GuildMember | PartialGuildMember, newMember: GuildMember) => {
       try {
         const author = {
           name: newMember.user.tag,
@@ -468,7 +467,7 @@ const auditModule: BotModule = {
       } catch (error) {
         logger.warn({ err: error }, "Role change audit failed");
       }
-    });
+    }));
   },
 };
 

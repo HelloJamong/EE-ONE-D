@@ -15,6 +15,7 @@ import {
   TextInputStyle,
 } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
+import { safeEventHandler } from "../../shared/events.js";
 import { PanelMode } from "@prisma/client";
 
 const BUTTON_PREFIX = "rp";
@@ -93,8 +94,8 @@ async function handleButton(interaction: ButtonInteraction, context: AppContext)
   const [prefix, panelId, itemId] = interaction.customId.split(":");
   if (prefix !== BUTTON_PREFIX || !panelId || !itemId) return;
   const prisma = context.db;
-  const panel = await prisma.role_panels.findUnique({
-    where: { id: panelId },
+  const panel = await prisma.role_panels.findFirst({
+    where: { id: panelId, guild_id: interaction.guildId! },
     include: { items: true, guild: true },
   });
   if (!panel || panel.guild_id !== interaction.guildId) return;
@@ -147,8 +148,8 @@ async function publishPanel(
   context: AppContext
 ) {
   const prisma = context.db;
-  const panel = await prisma.role_panels.findUnique({
-    where: { id: panelId },
+  const panel = await prisma.role_panels.findFirst({
+    where: { id: panelId, guild_id: interaction.guildId! },
     include: { items: true, guild: true },
   });
   if (!panel) {
@@ -405,6 +406,15 @@ const commands = [
         const label = interaction.options.getString("label", false) || "";
         const order = interaction.options.getInteger("order") ?? 0;
 
+        const panel = await prisma.role_panels.findFirst({
+          where: { id: panelId, guild_id: guildId },
+          select: { id: true },
+        });
+        if (!panel) {
+          await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
+          return;
+        }
+
         // 중복 확인
         const existingByEmoji = await prisma.role_panel_items.findFirst({
           where: { panel_id: panelId, emoji_id: emojiId },
@@ -444,6 +454,14 @@ const commands = [
           await interaction.reply({ content: "커스텀 이모지를 입력하세요.", ephemeral: true });
           return;
         }
+        const panel = await prisma.role_panels.findFirst({
+          where: { id: panelId, guild_id: guildId },
+          select: { id: true },
+        });
+        if (!panel) {
+          await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
+          return;
+        }
         await prisma.role_panel_items.deleteMany({
           where: { panel_id: panelId, emoji_id: emojiId },
         });
@@ -469,6 +487,14 @@ const commands = [
 
       if (sub === "list_items") {
         const panelId = interaction.options.getString("panel_id", true);
+        const panel = await prisma.role_panels.findFirst({
+          where: { id: panelId, guild_id: guildId },
+          select: { id: true },
+        });
+        if (!panel) {
+          await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
+          return;
+        }
         const items = await prisma.role_panel_items.findMany({
           where: { panel_id: panelId },
           orderBy: { sort_order: "asc" },
@@ -498,6 +524,14 @@ const commands = [
           await interaction.reply({ content: "텍스트 채널만 사용할 수 있습니다.", ephemeral: true });
           return;
         }
+        const panel = await prisma.role_panels.findFirst({
+          where: { id: panelId, guild_id: guildId },
+          select: { id: true },
+        });
+        if (!panel) {
+          await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
+          return;
+        }
         const channel = interaction.guild?.channels.cache.get(channelOption.id);
         if (!channel || channel.type !== ChannelType.GuildText) {
           await interaction.reply({ content: "채널을 찾을 수 없습니다.", ephemeral: true });
@@ -520,7 +554,9 @@ const commands = [
 
       if (sub === "edit") {
         const panelId = interaction.options.getString("panel_id", true);
-        const panel = await prisma.role_panels.findUnique({ where: { id: panelId } });
+        const panel = await prisma.role_panels.findFirst({
+          where: { id: panelId, guild_id: guildId },
+        });
         if (!panel) {
           await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
           return;
@@ -568,7 +604,9 @@ const commands = [
         const panelId = interaction.options.getString("panel_id", true);
         const deleteMessage = interaction.options.getBoolean("delete_message") ?? true;
 
-        const panel = await prisma.role_panels.findUnique({ where: { id: panelId } });
+        const panel = await prisma.role_panels.findFirst({
+          where: { id: panelId, guild_id: guildId },
+        });
         if (!panel) {
           await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
           return;
@@ -602,6 +640,15 @@ const commands = [
 
         if (!oldEmojiId) {
           await interaction.reply({ content: "유효한 커스텀 이모지를 입력하세요.", ephemeral: true });
+          return;
+        }
+
+        const panel = await prisma.role_panels.findFirst({
+          where: { id: panelId, guild_id: guildId },
+          select: { id: true },
+        });
+        if (!panel) {
+          await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
           return;
         }
 
@@ -669,6 +716,28 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction, context: A
   const [prefix, panelId] = interaction.customId.split(":");
   if (prefix !== "panel_edit" || !panelId) return;
 
+  if (!interaction.guildId || !interaction.memberPermissions?.has("Administrator")) {
+    await interaction.reply({ content: "Administrator 권한이 필요합니다.", ephemeral: true });
+    return;
+  }
+
+  const settings = await context.db.guild_settings.findUnique({
+    where: { guild_id: interaction.guildId },
+  });
+  if (settings?.admin_config_channel_id && interaction.channelId !== settings.admin_config_channel_id) {
+    await interaction.reply({ content: "관리자 설정 채널에서만 사용할 수 있습니다.", ephemeral: true });
+    return;
+  }
+
+  const panel = await context.db.role_panels.findFirst({
+    where: { id: panelId, guild_id: interaction.guildId },
+    select: { id: true },
+  });
+  if (!panel) {
+    await interaction.reply({ content: "패널을 찾을 수 없습니다.", ephemeral: true });
+    return;
+  }
+
   const title = interaction.fields.getTextInputValue("title");
   const description = interaction.fields.getTextInputValue("description");
   const modeInput = interaction.fields.getTextInputValue("mode").toUpperCase();
@@ -700,15 +769,15 @@ const rolePanelsModule: BotModule = {
   name: "rolePanels",
   commands,
   register: (context) => {
-    const { client } = context;
-    client.on("interactionCreate", async (interaction) => {
+    const { client, logger } = context;
+    client.on("interactionCreate", safeEventHandler(logger, "rolePanels:interactionCreate", async (interaction) => {
       if (interaction.isButton() && interaction.customId.startsWith(BUTTON_PREFIX)) {
         await handleButton(interaction, context);
       }
       if (interaction.isModalSubmit() && interaction.customId.startsWith("panel_edit:")) {
         await handleModalSubmit(interaction, context);
       }
-    });
+    }));
   },
 };
 

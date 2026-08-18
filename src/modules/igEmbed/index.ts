@@ -1,5 +1,6 @@
 import { AttachmentBuilder, EmbedBuilder, Message } from "discord.js";
 import { TTLCache } from "../../shared/cache.js";
+import { safeEventHandler } from "../../shared/events.js";
 import { BotModule, AppContext } from "../../types.js";
 
 type IgPreview = {
@@ -19,17 +20,12 @@ type IgPreview = {
 const IG_REGEX = /^https?:\/\/(www\.)?instagram\.com\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)\/?([?&][^ \n]*)?$/i;
 
 const IG_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-// GraphQL 프로토콜 상수(도메인 값 아님) — doc_id/app_id처럼 IG가 바꾸는 값이 아니라 env로 안 뺌.
-const IG_FB_LSD = "0";
-const IG_ASBD_ID = "129477";
 const MAX_EMBED_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const previewCache = new TTLCache<IgPreview>(5 * 60_000);
 
-let csrfCache: { token: string; cookies: string; expiresAt: number } | null = null;
-
-class IgUnavailableError extends Error {
-  constructor(public reason: "graphql_error" | "no_media") {
+export class IgUnavailableError extends Error {
+  constructor(public reason: "transient" | "no_media") {
     super(reason);
   }
 }
@@ -39,124 +35,60 @@ function extractShortcode(url: string): string | null {
   return match ? match[3] : null;
 }
 
-async function getCSRFToken(): Promise<{ token: string; cookies: string }> {
-  if (csrfCache && Date.now() < csrfCache.expiresAt) {
-    return { token: csrfCache.token, cookies: csrfCache.cookies };
-  }
-  const res = await fetch("https://www.instagram.com/", {
-    headers: { "User-Agent": IG_UA },
-  });
-  if (!res.ok) throw new Error(`Failed to fetch CSRF token: ${res.status}`);
-  const setCookies = res.headers.getSetCookie?.() ?? [];
-  const csrfCookie = setCookies.find((c) => c.startsWith("csrftoken="));
-  if (!csrfCookie) throw new Error("CSRF token not found in response headers");
-  const token = csrfCookie.split(";")[0].replace("csrftoken=", "");
-  const cookies = setCookies.map((c) => c.split(";")[0]).join("; ");
-  csrfCache = { token, cookies, expiresAt: Date.now() + 30 * 60_000 };
-  return { token, cookies };
-}
-
-async function fetchPreview(
+export async function fetchPreview(
   shortcode: string,
   postUrl: string,
-  logger: AppContext["logger"],
-  docId: string,
-  appId: string
+  logger: AppContext["logger"]
 ): Promise<IgPreview> {
   const cached = previewCache.get(shortcode);
   if (cached) return cached;
 
-  const { token, cookies } = await getCSRFToken();
-
-  const body = new URLSearchParams({
-    variables: JSON.stringify({ shortcode }),
-    doc_id: docId,
-  });
-
-  const res = await fetch("https://www.instagram.com/graphql/query", {
-    method: "POST",
+  // Instagram 공유 URL은 /reels/도 쓰지만 oEmbed API는 /reel/만 허용한다.
+  const oEmbedPostUrl = postUrl.replace(/instagram\.com\/reels\//i, "instagram.com/reel/");
+  const endpoint = `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(oEmbedPostUrl)}`;
+  const res = await fetch(endpoint, {
     headers: {
-      "X-CSRFToken": token,
-      "Content-Type": "application/x-www-form-urlencoded",
       "User-Agent": IG_UA,
-      "Accept": "*/*",
+      "Accept": "application/json",
       "Accept-Language": "ko-KR,ko;q=0.9",
-      "Origin": "https://www.instagram.com",
       "Referer": "https://www.instagram.com/",
-      "Cookie": cookies,
-      "X-IG-App-ID": appId,
-      "X-FB-LSD": IG_FB_LSD,
-      "X-ASBD-ID": IG_ASBD_ID,
     },
-    body: body.toString(),
   });
 
-  if (!res.ok) throw new Error(`Instagram GraphQL request failed: ${res.status}`);
-
-  const data = await res.json() as {
-    data?: { xdt_shortcode_media?: Record<string, unknown> | null } | null;
-    errors?: Array<{ message?: string; severity?: string }>;
-    require_login?: boolean;
-    status?: string;
-  };
-  const media = data?.data?.xdt_shortcode_media as Record<string, unknown> | null | undefined;
-
-  if (!media) {
-    if (data?.errors?.length) {
-      logger.warn({ shortcode, errors: data.errors }, "Instagram GraphQL returned an error — doc_id may be stale or post requires login");
-      throw new IgUnavailableError("graphql_error");
-    }
-    // 인스타그램이 세션을 레이트리밋/차단할 때 data/errors 없이 require_login+status만 내려줌 — 실제 비공개/삭제와 구분
-    if (data?.require_login || data?.status === "fail") {
-      logger.warn({ shortcode, data }, "Instagram GraphQL request was rate-limited or requires login — not a real private/deleted post");
-      throw new IgUnavailableError("graphql_error");
-    }
-    logger.warn({ shortcode }, "Instagram media null — private account, deleted post, or age/sensitive-content restricted");
+  if (res.status === 404) {
+    logger.warn({ shortcode }, "Instagram oEmbed found no public media");
     throw new IgUnavailableError("no_media");
   }
+  if (!res.ok) {
+    logger.warn({ shortcode, status: res.status }, "Instagram oEmbed request failed");
+    throw new IgUnavailableError("transient");
+  }
 
-  const owner = media.owner as Record<string, unknown>;
-  const caption = (media.edge_media_to_caption as { edges?: Array<{ node?: { text?: string } }> })
-    ?.edges?.[0]?.node?.text;
+  const data = await res.json() as {
+    title?: string;
+    author_name?: string;
+    html?: string;
+    thumbnail_url?: string;
+  };
 
+  if (!data.author_name || !data.thumbnail_url) {
+    logger.warn({ shortcode }, "Instagram oEmbed response is missing required fields");
+    throw new IgUnavailableError("transient");
+  }
+
+  const permalink = data.html?.match(/data-instgrm-permalink="([^"]+)"/)?.[1] ?? "";
   const preview: IgPreview = {
-    username: String(owner?.username ?? ""),
-    fullName: String(owner?.full_name ?? ""),
-    caption: caption?.trim() || undefined,
-    displayUrl: String(media.display_url ?? ""),
-    isVideo: Boolean(media.is_video),
+    username: data.author_name,
+    fullName: "",
+    caption: data.title?.trim() || undefined,
+    displayUrl: data.thumbnail_url,
+    isVideo: /instagram\.com\/(reel|reels|tv)\//i.test(permalink || postUrl),
     postUrl,
   };
 
   previewCache.set(shortcode, preview);
   logger.debug({ shortcode, username: preview.username }, "Cached Instagram preview");
   return preview;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// 인스타그램 레이트리밋(graphql_error)은 몇 초 뒤 재시도하면 풀리는 경우가 있어 짧게 재시도
-const GRAPHQL_ERROR_RETRY_DELAYS_MS = [3000, 6000];
-
-async function fetchPreviewWithRetry(
-  shortcode: string,
-  postUrl: string,
-  logger: AppContext["logger"],
-  docId: string,
-  appId: string
-): Promise<IgPreview> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await fetchPreview(shortcode, postUrl, logger, docId, appId);
-    } catch (err) {
-      const isTransient = err instanceof IgUnavailableError && err.reason === "graphql_error";
-      if (!isTransient || attempt >= GRAPHQL_ERROR_RETRY_DELAYS_MS.length) throw err;
-      logger.debug({ shortcode, attempt }, "Retrying Instagram preview after transient error");
-      await sleep(GRAPHQL_ERROR_RETRY_DELAYS_MS[attempt]);
-    }
-  }
 }
 
 async function tryDownloadImage(
@@ -224,9 +156,9 @@ function buildEmbed(
 const igEmbedModule: BotModule = {
   name: "igEmbed",
   register: (context: AppContext) => {
-    const { client, logger, config } = context;
+    const { client, logger } = context;
 
-    client.on("messageCreate", async (message) => {
+    client.on("messageCreate", safeEventHandler(logger, "igEmbed:messageCreate", async (message) => {
       if (!message.guild || message.author.bot) return;
       const content = message.content.trim();
 
@@ -244,7 +176,7 @@ const igEmbedModule: BotModule = {
       const postUrl = content.split(/[?&]/)[0].replace(/\/$/, "") + "/";
 
       try {
-        const preview = await fetchPreviewWithRetry(shortcode, postUrl, logger, config.IG_DOC_ID, config.IG_APP_ID);
+        const preview = await fetchPreview(shortcode, postUrl, logger);
         const attachment = await tryDownloadImage(preview.displayUrl, logger);
         const embed = buildEmbed(message, preview, attachment?.name ?? undefined);
 
@@ -267,7 +199,7 @@ const igEmbedModule: BotModule = {
       } catch (err) {
         logger.warn({ err, content }, "Failed to fetch Instagram preview");
 
-        const isTransient = err instanceof IgUnavailableError && err.reason === "graphql_error";
+        const isTransient = !(err instanceof IgUnavailableError) || err.reason === "transient";
         const reason = isTransient
           ? "일시적으로 미리보기를 가져오지 못했어요. 잠시 후 다시 시도해주세요."
           : "비공개 계정, 삭제된 게시물, 또는 로그인·연령 확인이 필요한 게시물이라 미리보기를 가져올 수 없어요.";
@@ -290,7 +222,7 @@ const igEmbedModule: BotModule = {
           logger.warn({ err: fallbackErr }, "Failed to send IG fallback notice");
         }
       }
-    });
+    }));
   },
 };
 

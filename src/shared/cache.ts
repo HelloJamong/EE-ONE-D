@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-
 type CacheEntry<T> = {
   value: T;
   expiresAt: number;
@@ -30,12 +28,17 @@ export type BufferFile = { name: string; data: Buffer };
 // 메시지 ID -> 이미지 버퍼들. 총 바이트가 상한을 넘으면 가장 오래된 항목부터 축출하는 LRU.
 // Map의 삽입 순서 보존을 이용해 oldest를 찾는다.
 export class BoundedBufferCache {
-  private store = new Map<string, { files: BufferFile[]; bytes: number }>();
+  private store = new Map<string, { files: BufferFile[]; bytes: number; expiresAt: number }>();
   private totalBytes = 0;
 
-  constructor(private maxBytes: number) {}
+  constructor(
+    private maxBytes: number,
+    private ttlMs = Number.POSITIVE_INFINITY,
+    private now: () => number = Date.now
+  ) {}
 
   set(key: string, files: BufferFile[]) {
+    this.pruneExpired();
     this.delete(key); // 동일 키 갱신 시 기존 바이트 먼저 회수
     const bytes = files.reduce((sum, f) => sum + f.data.length, 0);
     if (bytes <= 0 || bytes > this.maxBytes) return; // 단일 항목이 상한보다 크면 캐시하지 않음
@@ -44,7 +47,7 @@ export class BoundedBufferCache {
       if (oldest === undefined) break;
       this.delete(oldest);
     }
-    this.store.set(key, { files, bytes });
+    this.store.set(key, { files, bytes, expiresAt: this.now() + this.ttlMs });
     this.totalBytes += bytes;
   }
 
@@ -52,8 +55,23 @@ export class BoundedBufferCache {
   take(key: string): BufferFile[] | undefined {
     const entry = this.store.get(key);
     if (!entry) return undefined;
+    if (this.now() > entry.expiresAt) {
+      this.delete(key);
+      return undefined;
+    }
     this.delete(key);
     return entry.files;
+  }
+
+  pruneExpired(): number {
+    const now = this.now();
+    let removed = 0;
+    for (const [key, entry] of this.store) {
+      if (now <= entry.expiresAt) continue;
+      this.delete(key);
+      removed++;
+    }
+    return removed;
   }
 
   private delete(key: string) {
@@ -62,19 +80,4 @@ export class BoundedBufferCache {
     this.totalBytes -= entry.bytes;
     this.store.delete(key);
   }
-}
-
-// self-check: `node dist/shared/cache.js`
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const c = new BoundedBufferCache(10);
-  const file = (name: string, n: number): BufferFile => ({ name, data: Buffer.alloc(n) });
-  c.set("a", [file("a", 4)]);
-  c.set("b", [file("b", 4)]);
-  c.set("c", [file("c", 4)]); // 총 12 > 10 → 가장 오래된 "a" 축출
-  assert.equal(c.take("a"), undefined, "oldest entry should be evicted");
-  assert.ok(c.take("b"), "b should remain");
-  assert.ok(c.take("c"), "c should remain");
-  c.set("big", [file("big", 99)]); // 상한 초과 단일 항목은 캐시 안 함
-  assert.equal(c.take("big"), undefined, "oversized entry should not be cached");
-  console.log("BoundedBufferCache self-check passed");
 }

@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
+import { safeEventHandler } from "../../shared/events.js";
 import { handleAddCommand, handleEditCommand, handleRemoveCommand, handleListCommand, handleReloadCommand } from "./handlers.js";
 import { handleAddModal, handleEditModal } from "./modals.js";
 
@@ -96,13 +97,17 @@ const customCommandsModule: BotModule = {
   name: "customCommands",
   commands,
   register: (context) => {
-    context.client.on("interactionCreate", async (interaction) => {
+    context.client.on("interactionCreate", safeEventHandler(context.logger, "customCommands:interactionCreate", async (interaction) => {
       // 자동완성 핸들러
       if (interaction.isAutocomplete() && interaction.commandName === "cmd") {
+        if (!interaction.guildId) {
+          await interaction.respond([]);
+          return;
+        }
         const focusedOption = interaction.options.getFocused(true);
         if (focusedOption.name === "name") {
           const customCmds = await context.db.custom_commands.findMany({
-            where: { guild_id: interaction.guildId! },
+            where: { guild_id: interaction.guildId },
             select: { name: true },
           });
           const filtered = customCmds
@@ -122,7 +127,7 @@ const customCommandsModule: BotModule = {
           await handleEditModal(interaction, context);
         }
       }
-    });
+    }));
   },
 };
 

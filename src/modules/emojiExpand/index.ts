@@ -1,5 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
+import { safeEventHandler } from "../../shared/events.js";
 
 const CUSTOM_EMOJI_REGEX = /^<(?<animated>a?):\w+:(?<id>\d+)>$/;
 
@@ -16,7 +17,7 @@ const emojiExpandModule: BotModule = {
   name: "emojiExpand",
   register: (context: AppContext) => {
     const { client, logger } = context;
-    client.on("messageCreate", async (message) => {
+    client.on("messageCreate", safeEventHandler(logger, "emojiExpand:messageCreate", async (message) => {
       if (!message.guild || message.author.bot) return;
       const emoji = extractCustomEmoji(message.content);
       if (!emoji) return;
@@ -44,7 +45,7 @@ const emojiExpandModule: BotModule = {
       } catch (sendError) {
         logger.warn({ err: sendError }, "Failed to send expanded emoji");
       }
-    });
+    }));
   },
 };
 

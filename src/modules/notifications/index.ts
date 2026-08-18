@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
 import { handleSend, handleEdit, handleRemove } from "./handlers.js";
 import { handleSendModal, handleEditModal } from "./modals.js";
+import { safeEventHandler } from "../../shared/events.js";
 
 function ensureAdministrator(interaction: ChatInputCommandInteraction) {
   if (!interaction.memberPermissions?.has("Administrator")) {
@@ -80,7 +81,7 @@ const notificationsModule: BotModule = {
   name: "notifications",
   commands,
   register: (context) => {
-    context.client.on("interactionCreate", async (interaction) => {
+    context.client.on("interactionCreate", safeEventHandler(context.logger, "notifications:interactionCreate", async (interaction) => {
       if (interaction.isModalSubmit()) {
         if (interaction.customId === "noti_send_modal") {
           await handleSendModal(interaction, context);
@@ -88,7 +89,7 @@ const notificationsModule: BotModule = {
           await handleEditModal(interaction, context);
         }
       }
-    });
+    }));
   },
 };
 

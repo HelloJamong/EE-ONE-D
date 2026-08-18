@@ -15,6 +15,7 @@ import {
 } from "discord.js";
 import { randomBytes } from "crypto";
 import { BotModule, AppContext } from "../../types.js";
+import { safeEventHandler } from "../../shared/events.js";
 
 const BUTTON_PREFIX = "welcome";
 
@@ -162,21 +163,17 @@ const commands = [
       }
 
       if (sub === "edit") {
-        // 먼저 응답 예약 (DB 조회 전)
-        await interaction.deferReply({ ephemeral: true });
-
         const existing = await context.db.welcome_message.findUnique({
           where: { guild_id: interaction.guildId! },
         });
 
         if (!existing) {
-          await interaction.editReply({ content: "설정된 웰컴 메시지가 없습니다." });
+          await interaction.reply({ content: "설정된 웰컴 메시지가 없습니다.", ephemeral: true });
           return;
         }
 
         // 짧은 UUID 생성 (customId 100자 제한 대응)
         const sessionId = randomBytes(8).toString("hex");
-        context.cache.set(`welcome_edit:${sessionId}`, existing.role_ids);
 
         // Modal 표시 (기존 값 채우기)
         const modal = new ModalBuilder()
@@ -232,8 +229,6 @@ const commands = [
           new ActionRowBuilder<TextInputBuilder>().addComponents(rolesInput)
         );
 
-        // deferReply 후에는 showModal 불가능하므로 deleteReply 후 showModal
-        await interaction.deleteReply();
         await interaction.showModal(modal);
         return;
       }
@@ -282,6 +277,11 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction, context: A
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    if (!interaction.memberPermissions?.has("Administrator")) {
+      await interaction.editReply({ content: "Administrator 권한이 필요합니다." });
+      return;
+    }
+
     const title = interaction.fields.getTextInputValue("title");
     const content = interaction.fields.getTextInputValue("content");
     const buttonEmojiInput = interaction.fields.getTextInputValue("button_emoji") || null;
@@ -303,8 +303,6 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction, context: A
         return;
       }
 
-      // cache 삭제
-      context.cache.delete(`welcome_edit:${sessionId}`);
     } else {
       // setup 모드: cache에서 roleIds 가져오기
       const cachedRoleIds = context.cache.get(`welcome_setup:${sessionId}`) as string[] | undefined;
@@ -496,7 +494,7 @@ const welcomeModule: BotModule = {
   name: "welcome",
   commands,
   register: (context) => {
-    context.client.on("interactionCreate", async (interaction) => {
+    context.client.on("interactionCreate", safeEventHandler(context.logger, "welcome:interactionCreate", async (interaction) => {
       if (interaction.isModalSubmit() &&
           (interaction.customId.startsWith("welcome_setup:") || interaction.customId.startsWith("welcome_edit:"))) {
         await handleModalSubmit(interaction, context);
@@ -504,7 +502,7 @@ const welcomeModule: BotModule = {
       if (interaction.isButton() && interaction.customId.startsWith(BUTTON_PREFIX)) {
         await handleButton(interaction, context);
       }
-    });
+    }));
   },
 };
 

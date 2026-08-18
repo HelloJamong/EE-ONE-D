@@ -1,3 +1,5 @@
+import { parseCustomCommandResponses } from "../../shared/customCommandResponse.js";
+
 const RESERVED_COMMANDS = [
   "panel",
   "config",
@@ -36,6 +38,22 @@ export function validateResponse(response: string): { valid: boolean; error?: st
 
   if (response.length > 4000) {
     return { valid: false, error: "응답은 최대 4000자까지 입력 가능합니다." };
+  }
+
+  const parsed = parseCustomCommandResponses(response);
+  if (parsed.length === 0) {
+    return { valid: false, error: "유효한 응답 내용을 입력해주세요." };
+  }
+
+  for (const item of parsed) {
+    if (item.type === "embed") {
+      if (!item.title || !item.description) {
+        return { valid: false, error: "임베드는 EMBED:제목|||내용 형식으로 입력해주세요." };
+      }
+      if (item.title.length > 256) {
+        return { valid: false, error: "임베드 제목은 최대 256자까지 입력 가능합니다." };
+      }
+    }
   }
 
   return { valid: true };

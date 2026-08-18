@@ -1,5 +1,6 @@
-import { SlashCommandBuilder, ChannelType, ChatInputCommandInteraction, EmbedBuilder, ActivityType } from "discord.js";
+import { SlashCommandBuilder, ChannelType, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
+import { isPresenceController, setBotPresence } from "../../shared/presence.js";
 
 function ensureAdministrator(interaction: ChatInputCommandInteraction) {
   if (!interaction.memberPermissions?.has("Administrator")) {
@@ -77,6 +78,24 @@ const commands = [
               .setRequired(false)
           )
       )
+      .addSubcommand((sub) =>
+        sub
+          .setName("clear")
+          .setDescription("저장된 채널 설정을 초기화합니다.")
+          .addStringOption((opt) =>
+            opt
+              .setName("setting")
+              .setDescription("초기화할 설정")
+              .setRequired(true)
+              .addChoices(
+                { name: "역할 패널 채널", value: "role_channel" },
+                { name: "관리자 설정 채널", value: "admin_channel" },
+                { name: "감사 로그 채널", value: "log_channel" },
+                { name: "공지사항 채널", value: "notification_channel" },
+                { name: "웰컴 메시지 채널", value: "welcome_channel" }
+              )
+          )
+      )
       .addSubcommand((sub) => sub.setName("show").setDescription("현재 설정을 확인합니다."))
       .addSubcommand((sub) =>
         sub
@@ -138,6 +157,14 @@ const commands = [
       }
 
       if (sub === "bot_status") {
+        if (!isPresenceController(context.config, interaction.guildId)) {
+          await interaction.reply({
+            content: "봇 상태는 DISCORD_GUILD_ID로 지정된 운영 서버에서만 변경할 수 있습니다.",
+            ephemeral: true,
+          });
+          return;
+        }
+
         const activityType = interaction.options.getString("type", true) as "PLAYING" | "WATCHING" | "LISTENING";
         const activityText = interaction.options.getString("text", true);
 
@@ -155,14 +182,7 @@ const commands = [
           },
         });
 
-        // 봇 상태 업데이트
-        const discordActivityType = {
-          PLAYING: ActivityType.Playing,
-          WATCHING: ActivityType.Watching,
-          LISTENING: ActivityType.Listening,
-        }[activityType];
-
-        context.client.user?.setActivity(activityText, { type: discordActivityType });
+        setBotPresence(context, activityType, activityText);
 
         await logConfigUpdate(context, guildId, interaction.user.id, {
           activity_type: activityType,
@@ -190,11 +210,43 @@ const commands = [
         return;
       }
 
+      if (sub === "clear") {
+        if (!settings) {
+          await interaction.reply({ content: "초기화할 설정이 없습니다.", ephemeral: true });
+          return;
+        }
+        const setting = interaction.options.getString("setting", true);
+        const fieldBySetting = {
+          role_channel: "role_panel_channel_id",
+          admin_channel: "admin_config_channel_id",
+          log_channel: "log_channel_id",
+          notification_channel: "notification_channel_id",
+          welcome_channel: "welcome_channel_id",
+        } as const;
+        const field = fieldBySetting[setting as keyof typeof fieldBySetting];
+
+        await context.db.guild_settings.update({
+          where: { guild_id: guildId },
+          data: { [field]: null },
+        });
+        await logConfigUpdate(context, guildId, interaction.user.id, { [field]: null });
+        await interaction.reply({
+          content: `${setting} 설정을 초기화했습니다.`,
+          ephemeral: true,
+        });
+        return;
+      }
+
       const roleChannel = interaction.options.getChannel("role_channel", false);
       const adminChannel = interaction.options.getChannel("admin_channel", false);
       const logChannel = interaction.options.getChannel("log_channel", false);
       const notificationChannel = interaction.options.getChannel("notification_channel", false);
       const welcomeChannel = interaction.options.getChannel("welcome_channel", false);
+
+      if (!roleChannel && !adminChannel && !logChannel && !notificationChannel && !welcomeChannel) {
+        await interaction.reply({ content: "변경할 채널을 하나 이상 지정해주세요.", ephemeral: true });
+        return;
+      }
 
       const updated = await context.db.guild_settings.upsert({
         where: { guild_id: guildId },

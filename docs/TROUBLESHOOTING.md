@@ -382,7 +382,7 @@ docker compose exec -T db psql -U postgres eeoned < backup_20260312.sql
 
 **해결 방법:**
 
-Docker 이미지에서는 `prisma db push`를 사용하여 스키마를 자동으로 동기화합니다. 일반적으로 수동 개입이 필요 없습니다.
+Docker 이미지에서는 `prisma migrate deploy`를 사용하여 버전 관리된 마이그레이션을 자동 적용합니다. 일반적으로 수동 개입이 필요 없습니다.
 
 **로컬 개발 시:**
 ```bash

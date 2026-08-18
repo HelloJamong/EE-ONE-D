@@ -9,6 +9,27 @@ import { AppContext } from "../../types.js";
 import { validateCommandName, validateResponse, validateDescription } from "./validator.js";
 import { reloadCustomCommands } from "./reloader.js";
 
+async function ensureAdminModal(
+  interaction: ModalSubmitInteraction,
+  context: AppContext
+): Promise<boolean> {
+  if (!interaction.guildId || !interaction.memberPermissions?.has("Administrator")) {
+    await interaction.editReply({ content: "Administrator 권한이 필요합니다." });
+    return false;
+  }
+
+  const settings = await context.db.guild_settings.findUnique({
+    where: { guild_id: interaction.guildId },
+    select: { admin_config_channel_id: true },
+  });
+  if (settings?.admin_config_channel_id && interaction.channelId !== settings.admin_config_channel_id) {
+    await interaction.editReply({ content: "지정된 관리자 채널에서만 사용할 수 있습니다." });
+    return false;
+  }
+
+  return true;
+}
+
 export function createAddModal() {
   return new ModalBuilder()
     .setCustomId("cmd_add_modal")
@@ -74,6 +95,7 @@ export async function handleAddModal(
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    if (!(await ensureAdminModal(interaction, context))) return;
     const guildId = interaction.guildId!;
     const name = interaction.fields.getTextInputValue("name").toLowerCase().trim();
     const description = interaction.fields.getTextInputValue("description").trim() || null;
@@ -153,6 +175,7 @@ export async function handleEditModal(
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    if (!(await ensureAdminModal(interaction, context))) return;
     const guildId = interaction.guildId!;
     const name = interaction.customId.split(":")[1];
     const newDescription = interaction.fields.getTextInputValue("description").trim();

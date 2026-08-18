@@ -1,6 +1,7 @@
 import { AttachmentBuilder, EmbedBuilder, Message } from "discord.js";
 import { load, type CheerioAPI } from "cheerio";
 import { TTLCache } from "../../shared/cache.js";
+import { safeEventHandler } from "../../shared/events.js";
 import { BotModule, AppContext } from "../../types.js";
 
 type DcPreview = {
@@ -313,7 +314,7 @@ const dcEmbedModule: BotModule = {
   name: "dcEmbed",
   register: (context: AppContext) => {
     const { client, logger } = context;
-    client.on("messageCreate", async (message) => {
+    client.on("messageCreate", safeEventHandler(logger, "dcEmbed:messageCreate", async (message) => {
       if (!message.guild || message.author.bot) return;
       const content = message.content.trim();
 
@@ -365,7 +366,7 @@ const dcEmbedModule: BotModule = {
         // 미리보기 실패 시 원본 메시지 유지, 아무 동작 하지 않음
         logger.warn({ err: error }, "Failed to fetch dcinside preview");
       }
-    });
+    }));
   },
 };
 

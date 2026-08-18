@@ -1,6 +1,10 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, PermissionFlagsBits } from "discord.js";
 import { BotModule, AppContext } from "../../types.js";
 
+function truncateField(value: string): string {
+  return value.length <= 1024 ? value : `${value.slice(0, 1021)}...`;
+}
+
 const commands = [
   {
     data: new SlashCommandBuilder()
@@ -41,13 +45,13 @@ const commands = [
             .join("\n");
 
           embed.addFields(
-            { name: "📌 기본 명령어 (관리자 전용)", value: staticCommandList || "없음" },
-            { name: "⚙️ 커스텀 명령어", value: customCommandList }
+            { name: "📌 기본 명령어 (관리자 전용)", value: truncateField(staticCommandList || "없음") },
+            { name: "⚙️ 커스텀 명령어", value: truncateField(customCommandList) }
           );
         } else {
           // 일반 유저는 커스텀 명령어만 표시
           embed.addFields(
-            { name: "⚙️ 사용 가능한 명령어", value: customCommandList }
+            { name: "⚙️ 사용 가능한 명령어", value: truncateField(customCommandList) }
           );
         }
 

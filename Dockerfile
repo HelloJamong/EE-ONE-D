@@ -3,8 +3,8 @@ WORKDIR /app
 
 RUN apk add --no-cache openssl
 
-COPY package.json tsconfig.json ./
-RUN npm install
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci
 
 COPY prisma ./prisma
 COPY src ./src
@@ -22,7 +22,7 @@ RUN apk add --no-cache openssl
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY prisma ./prisma
-COPY package.json ./
+COPY package.json package-lock.json ./
 COPY CHANGELOG.md ./
 
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/index.js"]
+CMD ["sh", "-c", "node dist/scripts/prepareMigrations.js && npm run migrate:deploy && npm start"]

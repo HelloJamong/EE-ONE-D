@@ -9,6 +9,29 @@ import {
 } from "discord.js";
 import { AppContext } from "../../types.js";
 
+const MAX_NOTIFICATION_CONTENT_LENGTH = 1738;
+
+async function ensureAdminModal(
+  interaction: ModalSubmitInteraction,
+  context: AppContext
+): Promise<boolean> {
+  if (!interaction.guildId || !interaction.memberPermissions?.has("Administrator")) {
+    await interaction.editReply({ content: "Administrator 권한이 필요합니다." });
+    return false;
+  }
+
+  const settings = await context.db.guild_settings.findUnique({
+    where: { guild_id: interaction.guildId },
+    select: { admin_config_channel_id: true },
+  });
+  if (settings?.admin_config_channel_id && interaction.channelId !== settings.admin_config_channel_id) {
+    await interaction.editReply({ content: "지정된 관리자 채널에서만 사용할 수 있습니다." });
+    return false;
+  }
+
+  return true;
+}
+
 async function parseMentions(content: string, guildId: string, context: AppContext): Promise<string> {
   let parsedContent = content;
 
@@ -63,7 +86,7 @@ export function createSendModal() {
           .setCustomId("content")
           .setLabel("내용")
           .setStyle(TextInputStyle.Paragraph)
-          .setMaxLength(4000)
+          .setMaxLength(MAX_NOTIFICATION_CONTENT_LENGTH)
           .setRequired(true)
       )
     );
@@ -88,8 +111,8 @@ export function createEditModal(messageId: string, currentTitle: string, current
           .setCustomId("content")
           .setLabel("내용")
           .setStyle(TextInputStyle.Paragraph)
-          .setMaxLength(4000)
-          .setValue(currentContent)
+          .setMaxLength(MAX_NOTIFICATION_CONTENT_LENGTH)
+          .setValue(currentContent.slice(0, MAX_NOTIFICATION_CONTENT_LENGTH))
           .setRequired(true)
       )
     );
@@ -102,6 +125,7 @@ export async function handleSendModal(
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    if (!(await ensureAdminModal(interaction, context))) return;
     const guildId = interaction.guildId!;
     const title = interaction.fields.getTextInputValue("title");
     const content = interaction.fields.getTextInputValue("content");
@@ -168,6 +192,7 @@ export async function handleEditModal(
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    if (!(await ensureAdminModal(interaction, context))) return;
     const guildId = interaction.guildId!;
     const messageId = interaction.customId.split(":")[1];
     const title = interaction.fields.getTextInputValue("title");
