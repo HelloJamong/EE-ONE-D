@@ -15,7 +15,8 @@ type IgPreview = {
 // https://www.instagram.com/reel/{shortcode}/
 // https://www.instagram.com/reels/{shortcode}/
 // https://www.instagram.com/tv/{shortcode}/
-const IG_REGEX = /^https?:\/\/(www\.)?instagram\.com\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)\/?(\?[^ \n]*)?$/i;
+// 앱 공유 링크는 "?igsi=..." 대신 "&igsi=..."로 오는 경우가 있어 둘 다 허용
+const IG_REGEX = /^https?:\/\/(www\.)?instagram\.com\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)\/?([?&][^ \n]*)?$/i;
 
 const IG_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 // GraphQL 프로토콜 상수(도메인 값 아님) — doc_id/app_id처럼 IG가 바꾸는 값이 아니라 env로 안 뺌.
@@ -206,8 +207,8 @@ const igEmbedModule: BotModule = {
       const shortcode = extractShortcode(content);
       if (!shortcode) return;
 
-      // 쿼리 파라미터 제거한 clean URL을 postUrl로 사용
-      const postUrl = content.split("?")[0].replace(/\/$/, "") + "/";
+      // 쿼리 파라미터(? 또는 손상된 &) 제거한 clean URL을 postUrl로 사용
+      const postUrl = content.split(/[?&]/)[0].replace(/\/$/, "") + "/";
 
       try {
         const preview = await fetchPreview(shortcode, postUrl, logger, config.IG_DOC_ID, config.IG_APP_ID);
